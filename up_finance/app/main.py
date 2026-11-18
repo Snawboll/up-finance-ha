@@ -110,7 +110,7 @@ def main() -> None:
         print(json.dumps(metrics.overview(), indent=2))
         return
 
-    app = App(db, metrics, str(opts.get("api_key") or ""), do_sync)
+    app = App(db, metrics, str(opts.get("api_key") or ""), do_sync, syncer.progress if syncer else None)
     if args.dev:
         serve(app, int(os.environ.get("PORT", 8099)), "dev", host="127.0.0.1")
     else:

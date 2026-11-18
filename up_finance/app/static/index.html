@@ -393,7 +393,15 @@ function tiles(ov) {
 
 function syncStatus(ov, health) {
   const when = ov.last_sync_at ? new Date(ov.last_sync_at).toLocaleString("en-AU", { dateStyle: "medium", timeStyle: "short" }) : "never";
-  $("sync-status").innerHTML = `Last synced ${esc(when)}` + (health.last_error ? ` · <span class="error">Last error: ${esc(health.last_error)}</span>` : "");
+  const sy = health.sync || {};
+  $("sync-status").innerHTML = sy.running
+    ? `Syncing ${esc(sy.mode)}… ${(sy.fetched || 0).toLocaleString("en-AU")} transactions downloaded`
+    : `Last synced ${esc(when)}` + (health.last_error ? ` · <span class="error">Last error: ${esc(health.last_error)}</span>` : "");
+  clearTimeout(window._syncPoll);
+  if (sy.running) window._syncPoll = setTimeout(async () => {
+    const h = await api("api/health");
+    if (h.sync && h.sync.running) syncStatus(ov, h); else loadAll();
+  }, 3000);
 }
 
 async function loadCategories(month) {

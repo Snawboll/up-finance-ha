@@ -96,11 +96,27 @@ class Syncer:
         self.client = client
         self.tz = tz
         self.scope = scope
+        # Live progress, shown by /api/health and the dashboard.
+        self.progress: dict = {"running": False, "mode": None, "fetched": 0, "started_at": None}
 
     def in_scope(self, account: dict) -> bool:
         return self.scope == "all" or account["attributes"].get("ownershipType") == "JOINT"
 
     def sync(self, full: bool = False) -> dict:
+        try:
+            return self._sync(full)
+        finally:
+            self.progress["running"] = False
+
+    def _fetch(self, since_param, account_id=None):
+        for i, t in enumerate(self.client.transactions(since_param, account_id=account_id)
+                              if account_id else self.client.transactions(since_param), 1):
+            self.progress["fetched"] += 1
+            if self.progress["fetched"] % 1000 == 0:
+                log.info("Sync: %d transactions downloaded so far", self.progress["fetched"])
+            yield parse_transaction(t, self.tz)
+
+    def _sync(self, full: bool) -> dict:
         now = datetime.now(timezone.utc)
         now_iso = now.isoformat(timespec="seconds")
         today = now.astimezone(self.tz).strftime("%Y-%m-%d")
@@ -121,13 +137,15 @@ class Syncer:
             since = now - timedelta(days=days)
 
         since_param = since.isoformat(timespec="seconds") if since else None
+        mode = "full history" if since is None else f"last {(now - since).days} days"
+        self.progress.update(running=True, mode=mode, fetched=0, started_at=now.isoformat(timespec="seconds"))
+        log.info("Sync started (%s, %d accounts)", mode, len(accounts))
         rows: list[tuple[dict, list[str]]] = []
         if self.scope == "all":
-            rows = [parse_transaction(t, self.tz) for t in self.client.transactions(since_param)]
+            rows = list(self._fetch(since_param))
         else:
             for acc in accounts:
-                rows += [parse_transaction(t, self.tz)
-                         for t in self.client.transactions(since_param, account_id=acc["id"])]
+                rows += list(self._fetch(since_param, acc["id"]))
         scope_ids = [a["id"] for a in accounts]
 
         with self.db.writer() as conn:

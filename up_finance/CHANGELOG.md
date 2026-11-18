@@ -28,3 +28,7 @@
 ## 0.4.2
 - Read-only SQL (`/api/query`), `/api/schema` and `/api/export.csv` are available through the
   Home Assistant connector too, so phone reviews can query individual transactions.
+
+## 0.4.3
+- Sync progress: the log shows when a sync starts and every 1,000 transactions downloaded;
+  the Finance page shows "Syncing… N transactions downloaded" and refreshes when it's done.

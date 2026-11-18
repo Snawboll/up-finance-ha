@@ -75,11 +75,12 @@ class App:
     """Shared state for the handlers."""
 
     def __init__(self, db: Database, metrics: Metrics, api_key: str = "",
-                 trigger_sync: Optional[Callable[[], dict]] = None):
+                 trigger_sync: Optional[Callable[[], dict]] = None, sync_progress: Optional[dict] = None):
         self.db = db
         self.metrics = metrics
         self.api_key = api_key or ""
         self.trigger_sync = trigger_sync
+        self.sync_progress = sync_progress or {}
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -154,7 +155,8 @@ class Handler(BaseHTTPRequestHandler):
                 "/api/rules": lambda: self._rules(),
                 "/api/uncategorised": lambda: self._uncategorised(int(q.get("days", 365)), int(q.get("limit", 30))),
                 "/api/health": lambda: {"ok": True, "last_sync_at": self.app.db.get_state("last_sync_at"),
-                                        "last_error": self.app.db.get_state("last_error")},
+                                        "last_error": self.app.db.get_state("last_error"),
+                                        "sync": self.app.sync_progress},
             }
             routes["/api/schema"] = lambda: schema_description(self.app.db)
             if path in routes:
