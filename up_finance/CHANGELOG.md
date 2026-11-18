@@ -16,3 +16,7 @@
 ## 0.3.0
 - `payee_rules`: re-categorise uncategorised payments by payee and message, or treat them as
   transfers or income. Applied to your whole history and to every new sync.
+
+## 0.4.0
+- Rule endpoints for Claude: `/api/uncategorised`, `/api/rules`, `/api/rules/preview` (dry run).
+- New `up-payee-rules` skill: Claude manages payee rules through the Home Assistant connector.

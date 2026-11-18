@@ -68,6 +68,17 @@ payee_rules:
 `treat_as` can be `spending`, `income` or `transfer`. Rules apply to your whole history straight
 away, and to every new sync after that.
 
+### Letting Claude manage rules
+
+The `up-payee-rules` skill in this repository lets Claude manage your rules through the Home
+Assistant connector, from the phone app or desktop. It finds your biggest uncategorised payees,
+proposes rules, previews what they'd match, and saves them only after you say yes. The add-on
+API it uses (also reachable through ingress):
+
+- `GET /api/uncategorised?days=365`: biggest uncategorised payees, with sample messages
+- `GET /api/rules`: current rules and what each matches
+- `POST /api/rules/preview` with `{"payee_rules": [...], "ignore_payees": [...]}`: a dry run
+
 ## How spending is counted
 
 - **Transfers** between the synced accounts (saver top-ups, covers, round-ups) are ignored.

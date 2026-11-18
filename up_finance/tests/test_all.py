@@ -296,6 +296,25 @@ class WebTests(unittest.TestCase):
         code, body = self.get(self.dev, "/api/transactions?q=netflix")
         self.assertTrue(all("Netflix" in r["description"] for r in json.loads(body)))
 
+    def test_rule_endpoints_over_ingress(self):
+        code, body = self.get(self.ingress, "/api/uncategorised")
+        self.assertEqual(code, 200)
+        self.assertEqual(json.loads(body)[0]["payee"], "Rent - J Smith")
+        self.assertEqual(json.loads(self.get(self.ingress, "/api/rules")[1])["rules"], [])
+        rules = {"payee_rules": [{"payee": "rent", "message": "^rent$", "category": "utilities"},
+                                 {"payee": "nobody", "category": "family"}], "ignore_payees": ["Netflix"]}
+        code, body = self.get(self.ingress, "/api/rules/preview", {"Content-Type": "application/json"},
+                              json.dumps(rules).encode())
+        self.assertEqual(code, 200)
+        out = json.loads(body)["rules"]
+        self.assertGreater(out[0]["matched"], 10)
+        self.assertLess(out[0]["total"], 0)
+        self.assertEqual(out[0]["examples"][0]["description"], "Rent - J Smith")
+        self.assertEqual(out[1]["matched"], 0)
+        self.assertEqual(out[2]["rule"], {"payee": "Netflix", "treat_as": "transfer"})
+        # preview must not change anything
+        self.assertEqual(json.loads(self.get(self.ingress, "/api/uncategorised")[1])[0]["payee"], "Rent - J Smith")
+
     def test_lan_requires_key(self):
         self.assertEqual(self.get(self.lan, "/api/overview")[0], 401)
         self.assertEqual(self.get(self.lan, "/api/overview", {"Authorization": "Bearer wrong"})[0], 401)

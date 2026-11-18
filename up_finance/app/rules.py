@@ -71,24 +71,68 @@ def parse_rules(raw_rules, ignore_payees=()) -> list[Rule]:
     return rules
 
 
-def apply_rules(conn: sqlite3.Connection, rules: list[Rule]) -> int:
-    conn.execute("DELETE FROM txn_overrides")
+def match_rules(conn: sqlite3.Connection, rules: list[Rule]) -> list[tuple[str, int, Rule, Optional[str]]]:
+    """(transaction_id, rule_index, rule, parent_category) for every transaction a rule matches."""
     if not rules:
-        return 0
+        return []
     known_parents = {r[0]: r[1] for r in conn.execute("SELECT id, parent_id FROM categories")}
     rows = conn.execute(
-        "SELECT id, description, message, note FROM transactions "
-        "WHERE transfer_account_id IS NULL").fetchall()
+        "SELECT id, description, message, note FROM transactions WHERE transfer_account_id IS NULL").fetchall()
     out = []
     for row in rows:
-        rule = next((r for r in rules if r.matches(row["description"], row["message"], row["note"])), None)
-        if not rule:
+        idx = next((i for i, r in enumerate(rules) if r.matches(row["description"], row["message"], row["note"])),
+                   None)
+        if idx is None:
             continue
-        parent = rule.parent
-        if rule.category and not parent:
-            parent = known_parents.get(rule.category) or (rule.category if rule.category in known_parents
-                                                           else "uncategorised")
-        out.append((row["id"], rule.treat_as, rule.category, parent if rule.category else None))
+        rule = rules[idx]
+        parent = None
+        if rule.category:
+            parent = rule.parent or known_parents.get(rule.category) or (
+                rule.category if rule.category in known_parents else "uncategorised")
+        out.append((row["id"], idx, rule, parent))
+    return out
+
+
+def apply_rules(conn: sqlite3.Connection, rules: list[Rule]) -> int:
+    conn.execute("DELETE FROM txn_overrides")
+    matches = match_rules(conn, rules)
     conn.executemany(
-        "INSERT INTO txn_overrides(transaction_id, kind, category, parent_category) VALUES (?,?,?,?)", out)
-    return len(out)
+        "INSERT INTO txn_overrides(transaction_id, kind, category, parent_category) VALUES (?,?,?,?)",
+        [(tid, rule.treat_as, rule.category, parent) for tid, _, rule, parent in matches])
+    return len(matches)
+
+
+def preview_rules(conn: sqlite3.Connection, rules: list[Rule], samples: int = 5) -> list[dict]:
+    """What each rule would match, without changing anything."""
+    matches = match_rules(conn, rules)
+    by_rule: dict[int, list[str]] = {}
+    for tid, idx, _, _ in matches:
+        by_rule.setdefault(idx, []).append(tid)
+    out = []
+    for i, rule in enumerate(rules):
+        ids = by_rule.get(i, [])
+        info = {"rule": rule_to_dict(rule), "matched": len(ids), "total": 0.0, "first": None, "last": None,
+                "examples": []}
+        if ids:
+            marks = ",".join("?" * len(ids))
+            agg = conn.execute(f"SELECT SUM(amount_cents), MIN(local_date), MAX(local_date) FROM transactions "
+                               f"WHERE id IN ({marks})", ids).fetchone()
+            info.update(total=round((agg[0] or 0) / 100, 2), first=agg[1], last=agg[2])
+            info["examples"] = [dict(r) for r in conn.execute(
+                f"SELECT local_date AS date, description, message, amount_cents/100.0 AS amount FROM transactions "
+                f"WHERE id IN ({marks}) ORDER BY ABS(amount_cents) DESC LIMIT ?", ids + [samples])]
+        out.append(info)
+    return out
+
+
+def rule_to_dict(rule: Rule) -> dict:
+    d = {"payee": rule.payee}
+    if rule.message:
+        d["message"] = rule.message.pattern
+    if rule.category:
+        d["category"] = rule.category
+    if rule.parent:
+        d["parent"] = rule.parent
+    if rule.treat_as and not (rule.category and rule.treat_as == "spending"):
+        d["treat_as"] = rule.treat_as
+    return d

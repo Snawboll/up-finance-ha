@@ -29,8 +29,12 @@ the data either from the read-only API (on your home network) or from the `senso
 entities through the Home Assistant connector (anywhere, including the phone app). Then it
 writes a review, e.g. `/spending-review last 3 months, focus dining`.
 
-To use it in Claude Code, copy it to `~/.claude/skills/spending-review/`. To use it in the
-Claude apps, zip the `spending-review` folder and upload it under **Settings → Capabilities → Skills**.
+[`skills/up-payee-rules/SKILL.md`](skills/up-payee-rules/SKILL.md) lets Claude categorise
+uncategorised payments for you by managing the add-on's payee rules through the Home Assistant
+connector. It previews each change and asks before saving.
+
+To use the skills in Claude Code, copy them to `~/.claude/skills/`. To use it in the
+Claude apps, zip each skill folder and upload it under **Settings → Capabilities → Skills**.
 
 ## Development
 

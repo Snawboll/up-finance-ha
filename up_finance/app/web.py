@@ -23,6 +23,7 @@ from urllib.parse import parse_qs, urlparse
 
 from .db import Database
 from .metrics import Metrics
+from .rules import parse_rules, preview_rules
 
 log = logging.getLogger(__name__)
 
@@ -141,6 +142,8 @@ class Handler(BaseHTTPRequestHandler):
                 "/api/category_list": lambda: [
                     {"id": k, "name": v} for k, v in sorted(m.category_names().items(), key=lambda x: x[1])],
                 "/api/report": lambda: m.report(),
+                "/api/rules": lambda: self._rules(),
+                "/api/uncategorised": lambda: self._uncategorised(int(q.get("days", 365)), int(q.get("limit", 30))),
                 "/api/health": lambda: {"ok": True, "last_sync_at": self.app.db.get_state("last_sync_at"),
                                         "last_error": self.app.db.get_state("last_error")},
             }
@@ -174,6 +177,13 @@ class Handler(BaseHTTPRequestHandler):
                 return self._json(self.app.trigger_sync())
             except Exception as e:
                 return self._error(502, str(e))
+        if path == "/api/rules/preview":
+            conn = self.app.db.connect_readonly()
+            try:
+                rules = parse_rules(data.get("payee_rules"), data.get("ignore_payees"))
+                return self._json({"rules": preview_rules(conn, rules)})
+            finally:
+                conn.close()
         if path == "/api/query" and self.mode != "ingress":
             sql = (data.get("sql") or "").strip()
             if not sql:
@@ -183,6 +193,33 @@ class Handler(BaseHTTPRequestHandler):
             except sqlite3.Error as e:
                 return self._error(400, f"SQL error: {e}")
         return self._error(404, "Not found")
+
+    def _rules(self) -> dict:
+        """The rules currently in force (from the add-on options) and what each matches."""
+        conn = self.app.db.connect_readonly()
+        try:
+            return {"rules": preview_rules(conn, self.app.db.rules),
+                    "how_to_change": "Edit payee_rules / ignore_payees in the add-on options, then restart it. "
+                                     "POST /api/rules/preview with {payee_rules, ignore_payees} to test first."}
+        finally:
+            conn.close()
+
+    def _uncategorised(self, days: int, limit: int) -> list[dict]:
+        """Biggest uncategorised payees: the best candidates for new rules."""
+        return [dict(r) for r in self._ro(
+            """SELECT description AS payee, COUNT(*) AS count, ROUND(-SUM(amount_cents)/100.0, 2) AS spent,
+                      MIN(local_date) AS first, MAX(local_date) AS last,
+                      SUBSTR(GROUP_CONCAT(DISTINCT message), 1, 300) AS messages
+               FROM flows WHERE kind='spending' AND category='uncategorised'
+               AND local_date > date('now', ?) GROUP BY description ORDER BY spent DESC LIMIT ?""",
+            (f"-{max(1, days)} day", max(1, min(limit, 200))))]
+
+    def _ro(self, sql: str, params=()) -> list:
+        conn = self.app.db.connect_readonly()
+        try:
+            return conn.execute(sql, params).fetchall()
+        finally:
+            conn.close()
 
     def _export_csv(self):
         conn = self.app.db.connect_readonly()
