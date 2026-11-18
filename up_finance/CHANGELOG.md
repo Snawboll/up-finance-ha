@@ -24,3 +24,7 @@
 ## 0.4.1
 - Accept requests from Home Assistant's internal network (e.g. the HA MCP server), so Claude's
   Home Assistant connector can read the data and preview rules.
+
+## 0.4.2
+- Read-only SQL (`/api/query`), `/api/schema` and `/api/export.csv` are available through the
+  Home Assistant connector too, so phone reviews can query individual transactions.

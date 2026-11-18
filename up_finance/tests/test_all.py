@@ -321,12 +321,13 @@ class WebTests(unittest.TestCase):
         code, _ = self.get(self.lan, "/api/overview", {"Authorization": f"Bearer {self.key}"})
         self.assertEqual(code, 200)
 
-    def test_ingress_has_no_sql(self):
+    def test_ingress_has_read_only_sql(self):
         # test client connects from 127.0.0.1, which the ingress listener allows
         self.assertEqual(self.get(self.ingress, "/api/overview")[0], 200)
-        code, _ = self.get(self.ingress, "/api/query", data=b'{"sql":"SELECT 1"}')
-        self.assertEqual(code, 404)
-        self.assertEqual(self.get(self.ingress, "/api/export.csv")[0], 404)
+        code, body = self.get(self.ingress, "/api/query", data=b'{"sql":"SELECT 1 AS x"}')
+        self.assertEqual((code, json.loads(body)["rows"]), (200, [[1]]))
+        code, body = self.get(self.ingress, "/api/query", data=b'{"sql":"DELETE FROM transactions"}')
+        self.assertEqual(code, 400)
 
     def test_query_and_export(self):
         h = {"Authorization": f"Bearer {self.key}", "Content-Type": "application/json"}

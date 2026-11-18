@@ -18,7 +18,7 @@ Arguments (all optional, free text): `$ARGUMENTS`
 
 Try these in order and use the first that works. Say which one you used in one short line.
 
-### A. Read-only data API on the home network (most detail; from a computer at home)
+### A. Read-only data API on the home network (from a computer at home, if `api_key` is set)
 
 The API key is kept in the macOS Keychain. Never print it.
 
@@ -47,26 +47,29 @@ If the Keychain item is missing, tell the user how to add it (they type the key 
 
 ### B. Home Assistant connector (works anywhere, including the phone app)
 
-Read these entities through the Home Assistant tools (`ha_get_state`, or `ha_search` for `sensor.up_`).
-The report data is in each entity's **attributes**:
+The app's API is reachable through the connector's `ha_manage_app` tool in proxy mode. Find the
+slug with `ha_get_app(source="installed")` (the app named "Up Finance", e.g. `xxxxxxxx_up_finance`), then:
+
+- `ha_manage_app(slug=..., path="/api/report")`: everything in one call (overview, savers,
+  13 months by category, recurring, merchants, large and new transactions, budgets)
+- `ha_manage_app(slug=..., path="/api/query", method="POST", body={"sql": "SELECT ..."})`:
+  read-only SQL, same as option A (`/api/schema` describes the tables)
+- any other endpoint listed in option A, e.g. `path="/api/transactions?q=uber&month=2026-10"`
+
+If the proxy isn't available, the same summary data is in these entities' **attributes**
+(read them with `ha_get_state`, or find them with `ha_search` for `sensor.up_`):
 
 | Entity | What's in it |
 |---|---|
 | `sensor.up_report_savers` | every saver: top-up (= its budget), paid out per month, balance trend, what it paid for |
-| `sensor.up_saver_*` | one saver: paid out this month; attributes: budget, 3-month average, top categories |
-| `sensor.up_home_loan_owing` | home loan balance |
-| `sensor.up_spending_this_month` | spent so far; attributes: same point last month, projected, month |
-| `sensor.up_report_monthly` | 13 months: total spending, income, and spending by parent category |
+| `sensor.up_report_monthly` | 13 months: total spending, income, allowances, spending by category group |
 | `sensor.up_report_categories` | this month by category, with the 6-month average and budget |
-| `sensor.up_report_recurring` | active subscriptions/bills, cadence, amounts, price changes, annual total |
+| `sensor.up_report_recurring` | subscriptions and bills, cadence, amounts, price changes, annual total |
 | `sensor.up_report_merchants` | top merchants (90 days) and new merchants (30 days) |
 | `sensor.up_report_large_transactions` | large transactions in the last 30 days |
-| `sensor.up_budget_*` | each budget: spent, budget, projected, pace % |
-| `sensor.up_balance_*`, `sensor.up_total_balance` | account balances |
+| `sensor.up_spending_this_month` | spent so far; attributes: same point last month, projected |
+| `sensor.up_balance_*`, `sensor.up_total_balance`, `sensor.up_home_loan_owing` | balances |
 | `sensor.up_savings_rate_last_month`, `sensor.up_income_*` | income and savings rate |
-
-The connector can't do transaction-level queries. If the question needs them (e.g. "every
-Uber Eats order in March"), say so and suggest running it again from a computer at home.
 
 If neither source works, say what failed. Don't guess at numbers.
 

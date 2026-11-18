@@ -5,7 +5,7 @@ Two listeners share one handler:
   (172.30.32.0/23: the ingress proxy and other apps such as the HA MCP server).
   The port is never mapped to the host, so nothing on your LAN can reach it.
 - lan      (port 8098, exposed): every request needs `Authorization: Bearer <api_key>`.
-  Adds /api/query (read-only SQL) and /api/export.csv for ad-hoc analysis.
+Both offer the same read-only API, including /api/query (read-only SQL) and /api/export.csv.
 """
 from __future__ import annotations
 
@@ -156,11 +156,10 @@ class Handler(BaseHTTPRequestHandler):
                 "/api/health": lambda: {"ok": True, "last_sync_at": self.app.db.get_state("last_sync_at"),
                                         "last_error": self.app.db.get_state("last_error")},
             }
-            if self.mode != "ingress":
-                routes["/api/schema"] = lambda: schema_description(self.app.db)
+            routes["/api/schema"] = lambda: schema_description(self.app.db)
             if path in routes:
                 return self._json(routes[path]())
-            if path == "/api/export.csv" and self.mode != "ingress":
+            if path == "/api/export.csv":
                 return self._export_csv()
             return self._error(404, "Not found")
         except ValueError as e:
@@ -193,7 +192,7 @@ class Handler(BaseHTTPRequestHandler):
                 return self._json({"rules": preview_rules(conn, rules)})
             finally:
                 conn.close()
-        if path == "/api/query" and self.mode != "ingress":
+        if path == "/api/query":
             sql = (data.get("sql") or "").strip()
             if not sql:
                 return self._error(400, "Provide {\"sql\": \"SELECT ...\"}")
