@@ -21,6 +21,7 @@ from zoneinfo import ZoneInfo
 
 from .covers import link_covers
 from .db import Database
+from .rules import apply_rules
 from .up_client import UpClient
 
 log = logging.getLogger(__name__)
@@ -194,6 +195,7 @@ class Syncer:
                     removed += 1
 
             cover_stats = link_covers(conn)
+            apply_rules(conn, self.db.rules)
             self.db.set_state(conn, "account_scope", self.scope)
             if since is None:
                 self.db.set_state(conn, "full_sync_at", now_iso)

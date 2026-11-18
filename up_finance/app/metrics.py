@@ -64,6 +64,9 @@ class Metrics:
         names.setdefault("uncategorised", "Uncategorised")
         names.setdefault("home-loan-interest", "Home Loan Interest")
         names.setdefault("home-loan-repayments", "Home Loan Repayments")
+        for r in self._q("SELECT DISTINCT category FROM txn_overrides WHERE category IS NOT NULL "
+                         "UNION SELECT DISTINCT parent_category FROM txn_overrides WHERE parent_category IS NOT NULL"):
+            names.setdefault(r["category"], r["category"].replace("-", " ").title())
         return names
 
     # -- headline numbers --------------------------------------------------

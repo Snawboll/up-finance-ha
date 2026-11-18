@@ -17,6 +17,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from app.db import Database  # noqa: E402
 from app.ha import build_sensors  # noqa: E402
 from app.metrics import Metrics  # noqa: E402
+from app.rules import parse_rules  # noqa: E402
 from app.sync import Syncer  # noqa: E402
 from app.web import App, run_readonly_query, serve  # noqa: E402
 from fake_up import FakeUpClient, PERSONAL  # noqa: E402
@@ -213,6 +214,46 @@ class MetricsTests(unittest.TestCase):
             size = len(json.dumps(attrs, default=str))
             self.assertLess(size, 16384, f"{eid} attributes are {size} bytes")
             self.assertLess(len(str(state)), 255, eid)
+
+
+class RuleTests(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.db, self.client = setup_db(self.tmp.name)
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def kinds(self):
+        conn = self.db.connect()
+        try:
+            return {(r[0], r[1]): (r[2], r[3], r[4]) for r in conn.execute(
+                "SELECT description, COALESCE(message,''), kind, category, parent_category FROM flows "
+                "WHERE description LIKE 'Rent%' OR description='ACME PTY LTD' OR description='Netflix'")}
+        finally:
+            conn.close()
+
+    def test_rules(self):
+        rules = parse_rules([
+            {"payee": "rent - j", "message": "^rent$", "category": "utilities"},
+            {"payee": "ACME", "category": "Side Hustle", "parent": "work", "treat_as": "income"},
+        ], ["Netflix"])
+        self.assertGreater(self.db.set_rules(rules), 10)
+        k = self.kinds()
+        self.assertEqual(k[("Rent - J Smith", "Rent")], ("spending", "utilities", "home"))
+        self.assertEqual(k[("ACME PTY LTD", "Salary")], ("income", "side-hustle", "work"))
+        self.assertEqual(k[("Netflix", "")][0], "transfer")
+        names = Metrics(self.db, TZ, today=TODAY).category_names()
+        self.assertEqual(names["side-hustle"], "Side Hustle")
+        # rules survive a sync, and clearing them restores Up's classification
+        Syncer(self.db, self.client, TZ, scope="joint").sync()
+        self.assertEqual(self.kinds()[("Netflix", "")][0], "transfer")
+        self.db.set_rules([])
+        self.assertEqual(self.kinds()[("Netflix", "")], ("spending", "tv-and-music", "good-life"))
+
+    def test_bad_rules_are_skipped(self):
+        self.assertEqual(parse_rules([{"payee": "x", "message": "("}, {"payee": "y", "treat_as": "nope"},
+                                      {"payee": ""}]), [])
 
 
 class WebTests(unittest.TestCase):

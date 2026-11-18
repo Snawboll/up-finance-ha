@@ -20,6 +20,7 @@ spending sensors, and puts a **Finance** dashboard in the sidebar.
 | `api_key` | Optional. A long random string (16+ characters) that turns on the read-only data API for Claude. See below. |
 | `account_scope` | `joint` (default) syncs only 2Up accounts and never downloads individual accounts. `all` syncs every account the token can see. |
 | `ignore_payees` | Payee names that are really your own accounts at other banks (e.g. `Old Bank Account`). Their payments count as transfers instead of income or spending. |
+| `payee_rules` | Re-categorise payments Up leaves uncategorised (rates, childcare, payments through an old bank account). See below. |
 | `sync_interval_minutes` | How often to sync (5–1440, default 30). |
 | `large_transaction_threshold` | Spending at or above this many dollars is listed as a large transaction (default 200). |
 | `budgets` | Optional monthly budgets, keyed by Up category id. |
@@ -39,6 +40,33 @@ budgets:
 
 The category ids are the ones Up uses. You can see them in the Transactions table's category filter, or at
 `/api/category_list`.
+
+## Payee rules
+
+Up can't categorise bank transfers, BPAY and similar payments, so they all land in
+"Uncategorised". Rules fix that. Each rule matches a payee (a case-insensitive part of the
+description) and, optionally, the transaction message (a case-insensitive regular expression).
+The first matching rule wins.
+
+```yaml
+payee_rules:
+  - payee: City Council              # BPAY to the council -> Up's rates category
+    category: home-insurance-and-rates
+  - payee: Old Bank Account          # payments via an old account, split by message
+    message: car (re)?pay|pay off car
+    category: car-repayments
+  - payee: Old Bank Account
+    message: cleaner|babysit
+    category: household-help         # your own category...
+    parent: home                     # ...shown under Home
+  - payee: Old Bank Account
+    message: funding|transfer
+    treat_as: transfer               # moving your own money: not income or spending
+```
+
+`category` can be one of Up's category ids (listed at `/api/category_list`) or your own.
+`treat_as` can be `spending`, `income` or `transfer`. Rules apply to your whole history straight
+away, and to every new sync after that.
 
 ## How spending is counted
 

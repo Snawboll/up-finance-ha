@@ -1,5 +1,5 @@
 name: Up Finance
-version: "0.2.0"
+version: "0.3.0"
 slug: up_finance
 description: Stores your Up Bank transactions locally and builds a spending dashboard
 url: https://github.com/Snawboll/up-finance-ha
@@ -28,6 +28,7 @@ options:
   large_transaction_threshold: 200
   budgets: []
   ignore_payees: []
+  payee_rules: []
   log_level: info
 schema:
   up_token: password
@@ -40,4 +41,10 @@ schema:
       monthly: float(0,)
   ignore_payees:
     - str
+  payee_rules:
+    - payee: str
+      message: str?
+      category: str?
+      parent: str?
+      treat_as: list(spending|income|transfer)?
   log_level: list(debug|info|warning|error)

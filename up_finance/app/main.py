@@ -19,13 +19,14 @@ from zoneinfo import ZoneInfo
 from .db import Database
 from .ha import HomeAssistant
 from .metrics import Metrics
+from .rules import parse_rules
 from .sync import Syncer
 from .up_client import UpAuthError, UpClient
 from .web import App, serve
 
 log = logging.getLogger("up_finance")
 
-OPTIONS_FILE = Path("/data/options.json")
+OPTIONS_FILE = Path(os.environ.get("OPTIONS_FILE", "/data/options.json"))
 INGRESS_PORT = 8099
 LAN_PORT = 8098
 
@@ -46,6 +47,7 @@ def load_options() -> dict:
     opts.setdefault("log_level", "info")
     opts.setdefault("account_scope", "joint")
     opts.setdefault("ignore_payees", [])
+    opts.setdefault("payee_rules", [])
     return opts
 
 
@@ -72,7 +74,8 @@ def main() -> None:
     tz = ZoneInfo(os.environ.get("TZ") or "Australia/Sydney")
     data_dir = Path(os.environ.get("DATA_DIR", "/data"))
     db = Database(data_dir / "up_finance.db")
-    db.set_ignored_payees([str(p) for p in opts["ignore_payees"]])
+    n = db.set_rules(parse_rules(opts["payee_rules"], opts["ignore_payees"]))
+    log.info("Payee rules matched %d transactions", n)
     metrics = Metrics(db, tz, parse_budgets(opts["budgets"]), float(opts["large_transaction_threshold"]))
     ha = HomeAssistant()
 

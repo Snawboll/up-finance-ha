@@ -98,9 +98,13 @@ CREATE TABLE IF NOT EXISTS cover_links (
 );
 CREATE INDEX IF NOT EXISTS idx_cover_spend ON cover_links(spend_id);
 
--- Payees that are really your own accounts at other banks: treated as transfers.
-CREATE TABLE IF NOT EXISTS ignored_payees (
-    description TEXT PRIMARY KEY
+-- Results of the payee rules (see rules.py), rebuilt after every sync.
+DROP TABLE IF EXISTS ignored_payees;
+CREATE TABLE IF NOT EXISTS txn_overrides (
+    transaction_id TEXT PRIMARY KEY,
+    kind TEXT,                   -- spending | income | transfer | NULL (unchanged)
+    category TEXT,
+    parent_category TEXT
 );
 
 DROP VIEW IF EXISTS flows;
@@ -110,7 +114,7 @@ SELECT
     CASE
         WHEN t.transfer_account_id IN (SELECT id FROM accounts) THEN 'transfer'
         WHEN t.transfer_account_id IS NOT NULL THEN 'allowance'
-        WHEN t.description IN (SELECT description FROM ignored_payees) THEN 'transfer'
+        WHEN o.kind IS NOT NULL THEN o.kind
         WHEN a.type = 'HOME_LOAN' AND t.amount_cents < 0 AND t.description LIKE '%Interest%' THEN 'spending'
         WHEN a.type = 'HOME_LOAN' THEN 'loan'   -- drawdowns, adjustments
         WHEN t.category_id IS NOT NULL THEN 'spending'
@@ -118,15 +122,16 @@ SELECT
         ELSE 'income'
     END AS kind,
     CASE WHEN a.type = 'HOME_LOAN' THEN 'home-loan-interest'
-         ELSE COALESCE(t.category_id, 'uncategorised') END AS category,
+         ELSE COALESCE(o.category, t.category_id, 'uncategorised') END AS category,
     CASE WHEN a.type = 'HOME_LOAN' THEN 'home'
-         ELSE COALESCE(t.parent_category_id, 'uncategorised') END AS parent_category,
+         ELSE COALESCE(o.parent_category, t.parent_category_id, 'uncategorised') END AS parent_category,
     a.name AS account_name,
     a.type AS account_type,
     cl.saver_id AS covered_by_id,
     sv.name AS covered_by
 FROM transactions t
 LEFT JOIN accounts a ON a.id = t.account_id
+LEFT JOIN txn_overrides o ON o.transaction_id = t.id
 LEFT JOIN cover_links cl ON cl.spend_id = t.id
 LEFT JOIN accounts sv ON sv.id = cl.saver_id;
 """
@@ -137,6 +142,7 @@ class Database:
         self.path = str(path)
         Path(self.path).parent.mkdir(parents=True, exist_ok=True)
         self._write_lock = threading.Lock()
+        self.rules: list = []
         with closing(self.connect()) as conn:
             conn.executescript(SCHEMA)
             conn.commit()
@@ -175,11 +181,12 @@ class Database:
 
         return _W()
 
-    def set_ignored_payees(self, payees: list[str]) -> None:
+    def set_rules(self, rules: list) -> int:
+        """Store payee rules and apply them to everything already synced."""
+        from .rules import apply_rules
+        self.rules = rules
         with self.writer() as conn:
-            conn.execute("DELETE FROM ignored_payees")
-            conn.executemany("INSERT OR IGNORE INTO ignored_payees(description) VALUES (?)",
-                             [(p.strip(),) for p in payees if p and p.strip()])
+            return apply_rules(conn, rules)
 
     # -- sync state --------------------------------------------------------
     def get_state(self, key: str, default: str | None = None) -> str | None:
