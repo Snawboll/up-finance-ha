@@ -197,6 +197,33 @@ class MetricsTests(unittest.TestCase):
         self.assertGreater(daily["covered_avg_3m"], 300)
         self.assertIsNone(sv["Holiday"]["monthly_budget"])
 
+    def test_plan(self):
+        p = Metrics(self.db, TZ, reserve_saver="emergency fund", today=TODAY).plan()
+        self.assertEqual(p["reserve"]["saver"], "Emergency Fund")
+        self.assertEqual(p["reserve"]["balance"], 12500.0)
+        self.assertEqual(len(p["fortnights"]), 13)
+        # fortnights line up with the Daily Expenses top-up day and today is in the last one
+        cur = p["fortnights"][-1]
+        self.assertLessEqual(cur["start"], TODAY.isoformat())
+        self.assertLessEqual(TODAY.isoformat(), cur["end"])
+        daily = next(s for s in p["savers"] if s["saver"] == "🛒 Daily Expenses")
+        self.assertEqual(daily["role"], "spending")
+        self.assertEqual(daily["per_fortnight"], 600.0)
+        self.assertEqual(next(s for s in p["savers"] if s["saver"] == "Holiday")["role"], "goal")
+        sm = p["summary"]
+        self.assertEqual(sm["plan_per_fortnight"], 600.0)
+        self.assertEqual(sm["income_avg_per_fortnight"], 3100.0)  # salary every fortnight
+        self.assertAlmostEqual(sm["outgoings_per_fortnight"],
+                               sm["plan_per_fortnight"] + sm["outside_plan_avg"] + sm["personal_avg"], places=2)
+        self.assertGreater(p["reserve"]["runway_fortnights"], 0)
+        # groceries are paid by Daily Expenses, so they're never outside the plan
+        cats = {c["category"] for c in p["outside_categories"]}
+        self.assertNotIn("groceries", cats)
+        self.assertIn("restaurants-and-cafes", cats)
+        self.assertTrue(all(x >= 0 for x in p["outside_plan"]))
+        # no reserve configured: still works, just without the reserve block
+        self.assertIsNone(Metrics(self.db, TZ, reserve_saver="", today=TODAY).plan()["reserve"])
+
     def test_large_and_new(self):
         large = self.m.large_transactions(30)
         self.assertIn("Apple Store", [x["merchant"] for x in large])
@@ -210,6 +237,8 @@ class MetricsTests(unittest.TestCase):
         self.assertIn("sensor.up_saver_daily_expenses", sensors)
         self.assertIn("sensor.up_report_savers", sensors)
         self.assertIn("sensor.up_home_loan_owing", sensors)
+        self.assertIn("sensor.up_outgoings_per_fortnight", sensors)
+        self.assertIn("sensor.up_report_plan", sensors)
         for eid, (state, attrs) in sensors.items():
             size = len(json.dumps(attrs, default=str))
             self.assertLess(size, 16384, f"{eid} attributes are {size} bytes")

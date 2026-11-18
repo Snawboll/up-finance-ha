@@ -180,6 +180,35 @@ def build_sensors(m: Metrics) -> dict[str, tuple]:
                                      "monthly_budget", "covered_this_month", "covered_avg_3m",
                                      "budget_used_avg_pct", "months", "covered_by_month", "funded_by_month",
                                      "covered_categories_90d")} for sv in savers])
+    plan = m.plan()
+    sm = plan["summary"]
+    s[PREFIX + "outgoings_per_fortnight"] = _money(
+        "Up outgoings per fortnight", sm["outgoings_per_fortnight"], "mdi:calendar-sync",
+        plan=sm["plan_per_fortnight"], outside_plan_avg=sm["outside_plan_avg"], personal_avg=sm["personal_avg"],
+        income_avg=sm["income_avg_per_fortnight"], income_covers_pct=sm["income_covers_pct"])
+    s[PREFIX + "outside_plan_this_fortnight"] = _money(
+        "Up outside the plan this fortnight", plan["outside_plan"][-1], "mdi:cart-arrow-right",
+        fortnight_start=plan["current"]["start"], fortnight_end=plan["current"]["end"],
+        average=sm["outside_plan_avg"],
+        top_categories={c["name"]: c["this_fortnight"] for c in plan["outside_categories"] if c["this_fortnight"]})
+    if plan["reserve"]:
+        r = plan["reserve"]
+        s[PREFIX + "reserve_balance"] = _money(
+            "Up reserve balance", r["balance"], "mdi:safe", saver=r["saver"],
+            start_of_fortnight=r["balance_at_start_of_fortnight"], runway_fortnights=r["runway_fortnights"])
+        s[PREFIX + "reserve_runway"] = _info(
+            "Up reserve runway", r["runway_fortnights"], "mdi:timer-sand",
+            unit_of_measurement="fortnights", state_class="measurement",
+            outgoings_per_fortnight=sm["outgoings_per_fortnight"])
+    s[PREFIX + "report_plan"] = _info(
+        "Up report plan", plan["current"]["start"], "mdi:calendar-check",
+        summary=sm, fortnights=[f["start"] for f in plan["fortnights"]], reserve=plan["reserve"],
+        income=plan["income"], into_savers=plan["into_savers"], outside_plan=plan["outside_plan"],
+        personal=plan["personal"],
+        savers=[{k: sv[k] for k in ("saver", "role", "per_fortnight", "paid_out_avg", "balance", "balance_at_start")}
+                for sv in plan["savers"]],
+        outside_categories=[{k: c[k] for k in ("name", "parent_name", "per_fortnight", "this_fortnight")}
+                            for c in plan["outside_categories"][:12]])
     if ov.get("home_loan_balance") is not None:
         s[PREFIX + "home_loan_owing"] = _money("Up home loan owing", ov["home_loan_balance"], "mdi:home-percent")
 

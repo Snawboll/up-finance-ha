@@ -142,6 +142,7 @@ class Handler(BaseHTTPRequestHandler):
                 "/api/budgets": lambda: m.budgets_status(),
                 "/api/recurring": lambda: m.recurring(),
                 "/api/savers": lambda: m.savers(int(q.get("months", 6))),
+                "/api/plan": lambda: m.plan(int(q.get("fortnights", 13))),
                 "/api/merchants": lambda: m.merchants(int(q.get("days", 90)), int(q.get("limit", 25))),
                 "/api/large": lambda: m.large_transactions(int(q.get("days", 30)), int(q.get("limit", 15))),
                 "/api/new_merchants": lambda: m.new_merchants(int(q.get("days", 30))),

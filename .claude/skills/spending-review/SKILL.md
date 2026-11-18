@@ -51,7 +51,8 @@ The app's API is reachable through the connector's `ha_manage_app` tool in proxy
 slug with `ha_get_app(source="installed")` (the app named "Up Finance", e.g. `xxxxxxxx_up_finance`), then:
 
 - `ha_manage_app(slug=..., path="/api/report")`: everything in one call (overview, savers,
-  13 months by category, recurring, merchants, large and new transactions, budgets)
+  13 months by category, recurring, merchants, large and new transactions, budgets, and the
+  fortnightly plan under `plan`)
 - `ha_manage_app(slug=..., path="/api/query", method="POST", body={"sql": "SELECT ..."})`:
   read-only SQL, same as option A (`/api/schema` describes the tables)
 - any other endpoint listed in option A, e.g. `path="/api/transactions?q=uber&month=2026-10"`
@@ -61,6 +62,7 @@ If the proxy isn't available, the same summary data is in these entities' **attr
 
 | Entity | What's in it |
 |---|---|
+| `sensor.up_report_plan` | the fortnightly plan: reserve and runway, income vs going out per fortnight, savers, outside-the-plan categories |
 | `sensor.up_report_savers` | every saver: top-up (= its budget), paid out per month, balance trend, what it paid for |
 | `sensor.up_report_monthly` | 13 months: total spending, income, allowances, spending by category group |
 | `sensor.up_report_categories` | this month by category, with the 6-month average and budget |
@@ -79,6 +81,13 @@ If neither source works, say what failed. Don't guess at numbers.
   going out (rent, BPAY, Pay Anyone). **Income** = uncategorised money coming in (salary,
   interest, money from friends). **Transfers** between the user's own Up accounts (savers,
   round-ups, 2Up) are excluded from both.
+- **This household runs on a fortnightly plan.** All income collects in a reserve saver
+  (`plan.reserve`, usually "💰 Savings") and fixed fortnightly top-ups go to the other savers.
+  Read money per fortnight, not per month: contractor income makes single months swing. The key
+  numbers are in `plan.summary`: the plan (top-ups), spending outside the plan, personal money,
+  income averaged over 26 fortnights, and the reserve's runway in fortnights. Spending outside
+  the plan (`plan.outside_categories`, `plan.outside_purchases`) is what drains the reserve: say
+  what it was and whether it belongs in a saver's top-up. Don't judge a month's "savings rate".
 - **Savers can be budgets.** Many Up users top up each saver with a regular automatic transfer
   and pay for purchases with Cover. When a saver has a regular top-up, that top-up is its budget,
   and its "paid out" amount (covers plus any direct home loan repayments) is what it really cost.

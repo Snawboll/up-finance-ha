@@ -1,5 +1,5 @@
 name: Up Finance
-version: "0.4.3"
+version: "0.5.0"
 slug: up_finance
 description: Stores your Up Bank transactions locally and builds a spending dashboard
 url: https://github.com/Snawboll/up-finance-ha
@@ -26,6 +26,7 @@ options:
   account_scope: joint
   sync_interval_minutes: 30
   large_transaction_threshold: 200
+  reserve_saver: Savings
   budgets: []
   ignore_payees: []
   payee_rules: []
@@ -36,6 +37,7 @@ schema:
   account_scope: list(joint|all)
   sync_interval_minutes: int(5,1440)
   large_transaction_threshold: float(0,)
+  reserve_saver: str?
   budgets:
     - category: str
       monthly: float(0,)

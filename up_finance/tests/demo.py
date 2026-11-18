@@ -35,7 +35,8 @@ for acc, base in [("acc-spending", 3400), ("acc-saver", 11500), ("acc-holiday", 
                      ((today - timedelta(days=i)).isoformat(), acc, max(bal, 0)))
 conn.commit()
 conn.close()
-metrics = Metrics(db, tz, {"groceries": 600, "restaurants-and-cafes": 150, "takeaway": 120}, 200)
+metrics = Metrics(db, tz, {"groceries": 600, "restaurants-and-cafes": 150, "takeaway": 120}, 200,
+                  reserve_saver="Emergency Fund")
 serve(App(db, metrics, "", lambda: syncer.sync()), 8099, "dev", host="127.0.0.1")
 print("Dashboard on http://127.0.0.1:8099")
 while True:

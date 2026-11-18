@@ -94,6 +94,11 @@ summary { cursor: pointer; color: var(--text-secondary); font-size: 12px; }
 .empty { color: var(--muted); padding: 12px 0; }
 .error { color: var(--bad); }
 .pos { color: var(--good); }
+h3.group { font-size: 13px; font-weight: 600; margin: 16px 0 2px; }
+.split { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; margin-top: 8px; }
+@media (max-width: 860px) { .split { grid-template-columns: 1fr; } }
+.card-summary { font-size: 15px; font-weight: 600; color: var(--text-primary); }
+.delta.warn { color: var(--warning); }
 </style>
 </head>
 <body>
@@ -106,44 +111,48 @@ summary { cursor: pointer; color: var(--text-secondary); font-size: 12px; }
   <main>
     <section class="tiles" id="tiles"></section>
 
+    <section class="card half" id="reserve-card" hidden>
+      <h2 id="reserve-title">Reserve</h2>
+      <div class="sub">All income lands here. The fortnightly top-ups and anything outside the plan come out of it. Balance at the end of each fortnight.</div>
+      <div id="reserve-chart"></div>
+      <details><summary>Show data table</summary><div class="scroll" id="reserve-table"></div></details>
+    </section>
+
+    <section class="card half">
+      <h2>In and out per fortnight</h2>
+      <div class="sub">Income against everything going out: top-ups into savers, spending outside the plan, and personal money</div>
+      <div class="legend" id="inout-legend"></div>
+      <div id="inout-chart"></div>
+      <details><summary>Show data table</summary><div class="scroll" id="inout-table"></div></details>
+    </section>
+
     <section class="card">
-      <h2>Monthly spending by category</h2>
-      <div class="sub">Last 13 months, transfers between your own accounts excluded</div>
-      <div class="legend" id="monthly-legend"></div>
-      <div id="monthly-chart"></div>
-      <details><summary>Show data table</summary><div class="scroll" id="monthly-table"></div></details>
+      <h2>Fortnightly plan</h2>
+      <div class="sub" id="plan-sub"></div>
+      <h3 class="group">Spending savers</h3>
+      <div class="sub">Each saver's top-up is its budget for the fortnight. "Paid out" = covers it paid plus any home loan repayments.</div>
+      <div id="plan-spending"></div>
+      <h3 class="group">Goal savers</h3>
+      <div class="sub">Savers that build up rather than pay for things</div>
+      <div id="plan-goals"></div>
+      <details><summary>Paid out per fortnight, by saver</summary><div class="scroll" id="plan-table"></div></details>
     </section>
 
-    <section class="card" id="saver-card" hidden>
-      <h2>Savers</h2>
-      <div class="sub">Each saver's regular top-up is its budget. "Paid out" = covers it paid plus any home loan repayments.</div>
-      <div id="savers"></div>
-      <h2 style="margin-top:20px">Paid out by saver</h2>
-      <div class="sub">Per month</div>
-      <div class="legend" id="saver-legend"></div>
-      <div id="saver-chart"></div>
-      <details><summary>Show data table</summary><div class="scroll" id="saver-table"></div></details>
-    </section>
-
-    <section class="card half">
-      <h2>Income vs spending</h2>
-      <div class="sub">Per month</div>
-      <div class="legend" id="flow-legend"></div>
-      <div id="flow-chart"></div>
-      <details><summary>Show data table</summary><div class="scroll" id="flow-table"></div></details>
-    </section>
-
-    <section class="card half">
-      <h2>Account balances</h2>
-      <div class="sub">Weekly, last 12 months (home loan not shown)</div>
-      <div class="legend" id="balance-legend"></div>
-      <div id="balance-chart"></div>
-      <details><summary>Show data table</summary><div class="scroll" id="balance-table"></div></details>
+    <section class="card">
+      <h2>Outside the plan</h2>
+      <div class="sub" id="outside-sub">Spending that no topped-up saver paid for, so it came out of the reserve</div>
+      <div class="legend" id="outside-legend"></div>
+      <div id="outside-chart"></div>
+      <details><summary>Show data table</summary><div class="scroll" id="outside-table"></div></details>
+      <div class="split">
+        <div><h3 class="group">By category</h3><div class="sub">Average per fortnight over the last 12 full fortnights</div><div class="scroll" id="outside-cats"></div></div>
+        <div><h3 class="group">Biggest purchases</h3><div class="sub">Last 6 fortnights</div><div class="scroll" id="outside-buys"></div></div>
+      </div>
     </section>
 
     <section class="card">
       <div class="card-head">
-        <div><h2>Spending by category</h2><div class="sub">Compared with the average of the previous 6 months</div></div>
+        <div><h2>Spending by category</h2><div class="sub">Calendar month, compared with the average of the previous 6 months</div></div>
         <select id="cat-month" aria-label="Month"></select>
       </div>
       <div class="legend"><span><i style="background:var(--s1)"></i>This month</span><span><i class="line" style="background:var(--text-secondary);width:2px;height:12px"></i>6-month average</span></div>
@@ -191,6 +200,25 @@ summary { cursor: pointer; color: var(--text-secondary); font-size: 12px; }
       </div>
       <div class="scroll" id="tx"></div>
     </section>
+
+    <details class="card" id="monthly-view">
+      <summary class="card-summary">Monthly view: spending by group, income vs spending, account balances</summary>
+      <h2 style="margin-top:16px">Monthly spending by category group</h2>
+      <div class="sub">Last 13 months, transfers between your own accounts excluded</div>
+      <div class="legend" id="monthly-legend"></div>
+      <div id="monthly-chart"></div>
+      <details><summary>Show data table</summary><div class="scroll" id="monthly-table"></div></details>
+      <h2 style="margin-top:20px">Income vs spending</h2>
+      <div class="sub">Per calendar month. Contractor income makes single months swing; the fortnightly view above evens this out.</div>
+      <div class="legend" id="flow-legend"></div>
+      <div id="flow-chart"></div>
+      <details><summary>Show data table</summary><div class="scroll" id="flow-table"></div></details>
+      <h2 style="margin-top:20px">Account balances</h2>
+      <div class="sub">Weekly, last 12 months (home loan not shown)</div>
+      <div class="legend" id="balance-legend"></div>
+      <div id="balance-chart"></div>
+      <details><summary>Show data table</summary><div class="scroll" id="balance-table"></div></details>
+    </details>
   </main>
   <div class="tooltip" id="tip" role="status"></div>
 </div>
@@ -210,6 +238,11 @@ const compact = v => Math.abs(v) >= 10000 ? "$" + Math.round(v / 1000) + "K" : "
 const monthLabel = m => { const [y, mo] = m.split("-"); return new Date(+y, +mo - 1, 1).toLocaleDateString("en-AU", { month: "short" }) + (mo === "01" ? " " + y.slice(2) : ""); };
 const shortDate = d => d ? new Date(d + "T00:00:00").toLocaleDateString("en-AU", { day: "numeric", month: "short" }) : "";
 const monthLong = m => { const [y, mo] = m.split("-"); return new Date(+y, +mo - 1, 1).toLocaleDateString("en-AU", { month: "long", year: "numeric" }); };
+const MONTHS = { short: monthLabel, long: monthLong };
+const fnShort = f => shortDate(f.start);
+const fnLong = f => { const a = new Date(f.start + "T00:00:00"), b = new Date(f.end + "T00:00:00");
+  return a.toLocaleDateString("en-AU", { day: "numeric", month: "short" }) + " – " + b.toLocaleDateString("en-AU", { day: "numeric", month: "short", year: "numeric" }); };
+const FORTNIGHTS = { short: fnShort, long: fnLong };
 const api = async (path, opts) => { const r = await fetch(path, opts); const j = await r.json(); if (!r.ok) throw new Error(j.error || r.statusText); return j; };
 const svgEl = (w, h) => `<svg viewBox="0 0 ${w} ${h}" role="img">`;
 
@@ -265,7 +298,7 @@ function yAxis(W, M, H, scale, ticks) {
   return s;
 }
 
-function stackedColumns(el, months, series) {
+function stackedColumns(el, months, series, lab = MONTHS) {
   const W = 760, Hh = 260, M = { t: 12, r: 8, b: 26, l: 52 }, H = Hh - M.t - M.b, iw = W - M.l - M.r;
   const totals = months.map((_, i) => series.reduce((a, s) => a + Math.max(0, s.values[i]), 0));
   const sc = niceMax(Math.max(...totals, 1));
@@ -283,7 +316,8 @@ function stackedColumns(el, months, series) {
       s += top ? `<path d="${colPath(x, y, bw, hh)}" fill="${se.color}"/>` : `<rect x="${x}" y="${y}" width="${bw}" height="${hh}" fill="${se.color}"/>`;
       yCursor -= h;
     });
-    s += `<text x="${x + bw / 2}" y="${Hh - 8}" text-anchor="middle">${monthLabel(m)}</text>`;
+    if (months.length <= 13 || i % 2 === (months.length - 1) % 2)
+      s += `<text x="${x + bw / 2}" y="${Hh - 8}" text-anchor="middle">${lab.short(m)}</text>`;
     s += `<rect data-i="${i}" x="${M.l + band * i}" y="${M.t}" width="${band}" height="${H}" fill="transparent"/>`;
   });
   // label the latest month total
@@ -293,12 +327,12 @@ function stackedColumns(el, months, series) {
     s += `<text class="val" x="${x}" y="${y}" text-anchor="middle">${compact(totals[li])}</text>`;
   }
   el.innerHTML = s + "</svg>";
-  bindHover(el, i => `<b>${monthLong(months[i])}</b>` +
+  bindHover(el, i => `<b>${lab.long(months[i])}</b>` +
     series.filter(se => se.values[i]).slice().reverse().map(se => tipRow(se.color, se.name, fmt0(se.values[i]))).join("") +
     `<div class="row total"><span>Total</span><span>${fmt0(totals[i])}</span></div>`);
 }
 
-function groupedColumns(el, months, series) {
+function groupedColumns(el, months, series, lab = MONTHS, tipFn = null) {
   const W = 520, Hh = 240, M = { t: 12, r: 8, b: 26, l: 52 }, H = Hh - M.t - M.b, iw = W - M.l - M.r;
   const sc = niceMax(Math.max(1, ...series.flatMap(s => s.values)));
   const band = iw / months.length, bw = Math.min(14, (band * 0.7 - 2) / series.length);
@@ -310,11 +344,11 @@ function groupedColumns(el, months, series) {
       s += `<path d="${colPath(x0 + k * (bw + 2), M.t + H - h, bw, h)}" fill="${se.color}"/>`;
     });
     if (i % 2 === months.length % 2 || months.length < 8)
-      s += `<text x="${M.l + band * i + band / 2}" y="${Hh - 8}" text-anchor="middle">${monthLabel(m)}</text>`;
+      s += `<text x="${M.l + band * i + band / 2}" y="${Hh - 8}" text-anchor="middle">${lab.short(m)}</text>`;
     s += `<rect data-i="${i}" x="${M.l + band * i}" y="${M.t}" width="${band}" height="${H}" fill="transparent"/>`;
   });
   el.innerHTML = s + "</svg>";
-  bindHover(el, i => `<b>${monthLong(months[i])}</b>` + series.map(se => tipRow(se.color, se.name, fmt0(se.values[i]))).join("") +
+  bindHover(el, i => tipFn ? tipFn(i) : `<b>${lab.long(months[i])}</b>` + series.map(se => tipRow(se.color, se.name, fmt0(se.values[i]))).join("") +
     `<div class="row total"><span>Net</span><span>${fmt0(series[0].values[i] - series[1].values[i])}</span></div>`);
 }
 
@@ -376,18 +410,27 @@ function categoryBars(el, cats) {
 }
 
 // -- sections -------------------------------------------------------------
-function tiles(ov) {
-  const d = ov.spent_this_month - ov.spent_last_month_to_same_day;
-  const pct = ov.spent_last_month_to_same_day ? Math.round(d / ov.spent_last_month_to_same_day * 100) : null;
-  const t = [
-    ["Spent this month", fmt0(ov.spent_this_month), pct === null ? "" : `<div class="delta ${d > 0 ? "bad" : "good"}">${d > 0 ? "▲" : "▼"} ${Math.abs(pct)}% vs same point last month</div>`],
-    ["Projected for " + monthLong(ov.month).split(" ")[0], fmt0(ov.projected_this_month), `<div class="delta">Last month ${fmt0(ov.spent_last_month)}</div>`],
-    ["Income last month", fmt0(ov.income_last_month), `<div class="delta">This month so far ${fmt0(ov.income_this_month)}</div>`],
-    ["Savings rate last month", ov.savings_rate_last_month_pct === null ? "—" : ov.savings_rate_last_month_pct + "%", `<div class="delta">Net ${fmt0(ov.net_last_month)}</div>`],
-    ["Total balance", fmt0(ov.total_balance), `<div class="delta">${fmt0(ov.total_savers)} in savers</div>`],
-  ];
+function tiles(ov, plan) {
+  const sm = plan.summary, r = plan.reserve, cur = plan.current;
+  const out = plan.outside_plan[plan.outside_plan.length - 1];
+  const t = [];
+  if (r) {
+    const ch = r.balance - r.balance_at_start_of_fortnight;
+    t.push([esc(r.saver), fmt0(r.balance), `<div class="delta ${ch < 0 ? "bad" : "good"}">${ch < 0 ? "▼" : "▲"} ${fmt0(Math.abs(ch))} since this fortnight started</div>`]);
+    t.push(["Runway", r.runway_fortnights === null ? "—" : `${r.runway_fortnights} fortnights`,
+      `<div class="delta">How long the reserve would last with no income, at ${fmt0(sm.outgoings_per_fortnight)} a fortnight</div>`]);
+  } else {
+    t.push(["Reserve", "Not set", `<div class="delta">Set <b>reserve_saver</b> in the add-on's Configuration tab to the saver your income collects in (now "${esc(plan.reserve_saver_setting)}")</div>`]);
+  }
+  t.push(["Going out per fortnight", fmt0(sm.outgoings_per_fortnight),
+    `<div class="delta">Plan ${fmt0(sm.plan_per_fortnight)} · outside it ${fmt0(sm.outside_plan_avg)} · personal ${fmt0(sm.personal_avg)}</div>`]);
+  const cov = sm.income_covers_pct;
+  t.push(["Income per fortnight", fmt0(sm.income_avg_per_fortnight),
+    `<div class="delta ${cov === null ? "" : cov >= 100 ? "good" : "bad"}">Average of the last ${sm.income_fortnights_averaged} fortnights${cov === null ? "" : ` · ${cov}% of what goes out`}</div>`]);
+  t.push(["Outside the plan this fortnight", fmt0(out),
+    `<div class="delta ${out > sm.outside_plan_avg ? "bad" : ""}">Day ${cur.day} of 14 · usually ${fmt0(sm.outside_plan_avg)} a fortnight</div>`]);
   if (ov.home_loan_balance !== null && ov.home_loan_balance !== undefined)
-    t.push(["Home loan owing", fmt0(ov.home_loan_balance), ""]);
+    t.push(["Home loan owing", fmt0(ov.home_loan_balance), `<div class="delta">${fmt0(ov.total_balance)} in savers and spending</div>`]);
   $("tiles").innerHTML = t.map(([l, v, x]) => `<div class="tile"><div class="label">${l}</div><div class="value">${v}</div>${x}</div>`).join("");
 }
 
@@ -424,44 +467,91 @@ async function loadTransactions() {
   ], rows);
 }
 
-function renderSavers(savers) {
-  $("saver-card").hidden = !savers.length;
-  if (!savers.length) return;
-  const budgeted = savers.filter(s => s.monthly_budget);
-  const other = savers.filter(s => !s.monthly_budget && (s.covered_avg_3m > 0 || s.covered_this_month > 0));
-  const ov = savers[0].months;
-  const row = s => {
-    const pct = s.monthly_budget ? s.covered_this_month / s.monthly_budget * 100 : 0;
-    const avg = s.budget_used_avg_pct;
-    const status = avg === null ? null : avg > 105 ? ["var(--bad)", "⚠ Overspending"] : avg > 95 ? ["var(--warning)", "● At its limit"]
-      : avg < 25 && s.balance >= s.balance_90d_ago ? ["var(--s1)", "◆ Building up"] : ["var(--s1)", "✓ Within budget"];
-    const cats = s.covered_categories_90d.slice(0, 3).map(c => `${esc(c.category)} ${fmt0(c.amount)}`).join(" · ");
-    return `<div class="saver"><div class="head"><b>${esc(s.saver)}</b><span>${fmt0(s.covered_this_month)}${s.monthly_budget ? " / " + fmt0(s.monthly_budget) : ""}</span></div>
-      ${s.monthly_budget ? `<div class="meter"><div style="width:${Math.min(100, pct)}%;background:${status[0]}"></div></div>` : ""}
-      <div class="meta">${s.top_up ? `${fmt0(s.top_up)} ${esc(s.top_up_cadence)} top-up · ` : "No regular top-up · "}balance ${fmt0(s.balance)} (${s.balance >= s.balance_90d_ago ? "▲" : "▼"} ${fmt0(Math.abs(s.balance - s.balance_90d_ago))} in 90 days)</div>
-      ${status ? `<div class="meta">${status[1]} · last 3 months averaged ${fmt0(s.covered_avg_3m)}/mo (${avg}%)</div>` : `<div class="meta">Covered ${fmt0(s.covered_avg_3m)}/mo on average over the last 3 months</div>`}
-      ${cats ? `<div class="meta">90 days: ${cats}</div>` : ""}</div>`;
-  };
-  $("savers").innerHTML = `<div class="savers">${budgeted.map(row).join("")}</div>` +
-    (other.length ? `<h2 style="margin-top:16px;font-size:13px">Spending covered by savers without a regular top-up</h2><div class="savers">${other.map(row).join("")}</div>` : "");
-  const active = savers.filter(s => s.covered_by_month.some(v => v > 0)).slice(0, 8);
-  const series = active.map((s, i) => ({ name: s.saver, values: s.covered_by_month, color: SERIES(i + 1) }));
-  legend($("saver-legend"), series.map(s => [s.color, s.name]));
-  stackedColumns($("saver-chart"), ov, series);
-  $("saver-table").innerHTML = table(
-    [{ label: "Month", get: r => monthLong(r.m) }, ...active.map(s => ({ label: s.saver, num: 1, get: r => fmt0(r.v[s.saver]) }))],
-    ov.map((m, i) => ({ m, v: Object.fromEntries(active.map(s => [s.saver, s.covered_by_month[i]])) })).reverse());
+function renderPlan(plan) {
+  const F = plan.fortnights, sm = plan.summary, last = F.length - 1;
+  const r = plan.reserve;
+  $("reserve-card").hidden = !r;
+  if (r) {
+    $("reserve-title").textContent = "Reserve: " + r.saver;
+    const pts = F.map((f, i) => ({ date: i === last ? new Date().toISOString().slice(0, 10) : f.end, balance: r.balance_by_fortnight[i] }));
+    lineChart($("reserve-chart"), [{ account: r.saver, color: SERIES(1), points: pts }]);
+    $("reserve-table").innerHTML = table([{ label: "Fortnight", get: x => fnLong(x.f) }, { label: "Balance at end", num: 1, get: x => fmt0(x.b) }],
+      F.map((f, i) => ({ f, b: r.balance_by_fortnight[i] })).reverse());
+  }
+
+  // in and out
+  const outgo = F.map((_, i) => plan.into_savers[i] + plan.outside_plan[i] + plan.personal[i]);
+  const flow = [{ name: "Income", color: SERIES(3), values: plan.income }, { name: "Going out", color: SERIES(2), values: outgo }];
+  legend($("inout-legend"), flow.map(x => [x.color, x.name]));
+  groupedColumns($("inout-chart"), F, flow, FORTNIGHTS, i => `<b>${fnLong(F[i])}</b>` +
+    tipRow(SERIES(3), "Income", fmt0(plan.income[i])) + tipRow(SERIES(2), "Going out", fmt0(outgo[i])) +
+    tipRow("", "· into savers", fmt0(plan.into_savers[i])) + tipRow("", "· outside the plan", fmt0(plan.outside_plan[i])) +
+    tipRow("", "· personal", fmt0(plan.personal[i])) +
+    `<div class="row total"><span>Net</span><span>${fmt0(plan.income[i] - outgo[i])}</span></div>` + (i === last ? `<div class="sub">This fortnight so far</div>` : ""));
+  $("inout-table").innerHTML = table([
+    { label: "Fortnight", get: x => fnLong(x.f) }, { label: "Income", num: 1, get: x => fmt0(x.i) }, { label: "Into savers", num: 1, get: x => fmt0(x.s) },
+    { label: "Outside plan", num: 1, get: x => fmt0(x.o) }, { label: "Personal", num: 1, get: x => fmt0(x.p) }, { label: "Net", num: 1, get: x => fmt0(x.i - x.s - x.o - x.p) },
+  ], F.map((f, i) => ({ f, i: plan.income[i], s: plan.into_savers[i], o: plan.outside_plan[i], p: plan.personal[i] })).reverse());
+
+  // the plan
+  $("plan-sub").innerHTML = `This fortnight: ${esc(fnLong(plan.current))} (day ${plan.current.day} of 14). Top-ups total <b>${fmt0(sm.plan_per_fortnight)}</b> a fortnight.`;
+  const spenders = plan.savers.filter(x => x.role === "spending");
+  const goals = plan.savers.filter(x => x.role === "goal" && (x.balance || x.put_in.some(v => v)));
+  const change = x => { const c = x.balance - x.balance_at_start; return `${c >= 0 ? "▲" : "▼"} ${fmt0(Math.abs(c))} in ${F.length} fortnights`; };
+  $("plan-spending").innerHTML = `<div class="savers">${spenders.map(x => {
+    const now = x.paid_out[last], b = x.per_fortnight;
+    const avgPct = b ? Math.round(x.paid_out_avg / b * 100) : null;
+    const st = avgPct === null ? null : avgPct > 105 ? ["var(--bad)", "⚠ Overspending"] : avgPct > 95 ? ["var(--warning)", "● At its limit"]
+      : avgPct < 25 ? ["var(--s1)", "◆ Mostly unused"] : ["var(--s1)", "✓ Within budget"];
+    return `<div class="saver"><div class="head"><b>${esc(x.saver)}</b><span>${fmt0(now)}${b ? " / " + fmt0(b) : ""}</span></div>
+      ${b ? `<div class="meter"><div style="width:${Math.min(100, now / b * 100)}%;background:${st[0]}"></div></div>` : ""}
+      <div class="meta">${b ? `${fmt0(b)} a fortnight` + (x.top_up_cadence !== "fortnightly" ? ` (${fmt0(x.top_up)} ${esc(x.top_up_cadence)})` : "") : "No regular top-up"} · balance ${fmt0(x.balance)} (${change(x)})</div>
+      ${st ? `<div class="meta">${st[1]} · paid out ${fmt0(x.paid_out_avg)} a fortnight on average (${avgPct}%)</div>` : `<div class="meta">Paid out ${fmt0(x.paid_out_avg)} a fortnight on average</div>`}</div>`;
+  }).join("")}</div>`;
+  $("plan-goals").innerHTML = goals.length ? `<div class="savers">${goals.map(x => {
+    const added = x.put_in.slice(0, last).reduce((a, v) => a + v, 0) / Math.max(1, last);
+    return `<div class="saver"><div class="head"><b>${esc(x.saver)}</b><span>${fmt0(x.balance)}</span></div>
+      <div class="meta">${x.per_fortnight ? `${fmt0(x.per_fortnight)} a fortnight` : added >= 1 ? `No regular top-up · about ${fmt0(added)} a fortnight added` : "No regular top-up"} · ${change(x)}</div></div>`;
+  }).join("")}</div>` : `<div class="empty">No goal savers.</div>`;
+  $("plan-table").innerHTML = table(
+    [{ label: "Fortnight", get: x => fnLong(x.f) }, ...spenders.map(sv => ({ label: sv.saver, num: 1, get: x => fmt0(sv.paid_out[x.i]) }))],
+    F.map((f, i) => ({ f, i })).reverse());
+
+  // outside the plan
+  $("outside-sub").textContent = `Spending that no topped-up saver paid for, so it came out of ${r ? "the reserve (" + r.saver + ")" : "the reserve"}. Averaging ${fmt0(sm.outside_plan_avg)} a fortnight.`;
+  const groups = {};
+  plan.outside_categories.forEach(c => {
+    const g = groups[c.parent] || (groups[c.parent] = { name: c.parent_name, values: F.map(() => 0) });
+    c.by_fortnight.forEach((v, i) => g.values[i] += v);
+  });
+  const oseries = Object.entries(groups).map(([k, g]) => ({ name: g.name, values: g.values, color: SERIES(PARENT_SLOT[k] || 6), slot: PARENT_SLOT[k] || 9 }))
+    .sort((a, b) => a.slot - b.slot);
+  legend($("outside-legend"), oseries.map(x => [x.color, x.name]));
+  stackedColumns($("outside-chart"), F, oseries, FORTNIGHTS);
+  $("outside-table").innerHTML = table(
+    [{ label: "Fortnight", get: x => fnLong(x.f) }, ...oseries.map(g => ({ label: g.name, num: 1, get: x => fmt0(g.values[x.i]) })), { label: "Total", num: 1, get: x => fmt0(plan.outside_plan[x.i]) }],
+    F.map((f, i) => ({ f, i })).reverse());
+  $("outside-cats").innerHTML = table([
+    { label: "Category", get: c => c.name }, { label: "Group", get: c => c.parent_name },
+    { label: "Per fortnight", num: 1, get: c => fmt0(c.per_fortnight) }, { label: "This fortnight", num: 1, get: c => c.this_fortnight ? fmt0(c.this_fortnight) : "" },
+  ], plan.outside_categories.filter(c => c.per_fortnight >= 1 || c.this_fortnight).slice(0, 15));
+  $("outside-buys").innerHTML = table([
+    { label: "Date", num: 1, get: x => shortDate(x.date) },
+    { label: "Merchant", html: x => esc(x.merchant) + (x.message ? `<div class="sub">${esc(x.message)}</div>` : "") },
+    { label: "Category", get: x => x.category },
+    { label: "Amount", num: 1, get: x => fmt0(x.amount) },
+  ], plan.outside_purchases.slice(0, 12));
 }
 
 async function loadAll() {
-  const [ov, monthly, balances, budgets, recurring, merchants, large, newM, catList, health, savers] = await Promise.all([
+  const [ov, monthly, balances, budgets, recurring, merchants, large, newM, catList, health, plan] = await Promise.all([
     api("api/overview"), api("api/monthly"), api("api/balances"), api("api/budgets"), api("api/recurring"),
     api("api/merchants?days=90&limit=15"), api("api/large?days=30"), api("api/new_merchants?days=30"),
-    api("api/category_list"), api("api/health"), api("api/savers"),
+    api("api/category_list"), api("api/health"), api("api/plan"),
   ]);
-  renderSavers(savers);
   syncStatus(ov, health);
-  tiles(ov);
+  tiles(ov, plan);
+  renderPlan(plan);
 
   // monthly stacked
   const series = monthly.spending.map(sp => ({ name: sp.name, values: sp.values, color: SERIES(PARENT_SLOT[sp.category] || 6) }))

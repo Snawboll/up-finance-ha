@@ -32,3 +32,12 @@
 ## 0.4.3
 - Sync progress: the log shows when a sync starts and every 1,000 transactions downloaded;
   the Finance page shows "Syncing… N transactions downloaded" and refreshes when it's done.
+
+## 0.5.0
+- Dashboard rebuilt around a fortnightly plan: all income collects in a reserve saver
+  (`reserve_saver`, default `Savings`) and fixed fortnightly top-ups go to the other savers.
+  New sections: the reserve's balance and runway, income vs money going out per fortnight,
+  spending and goal savers per fortnight, and spending outside the plan by category and purchase.
+- Monthly charts moved into a collapsed "Monthly view".
+- New `/api/plan` endpoint and sensors: `up_reserve_balance`, `up_reserve_runway`,
+  `up_outgoings_per_fortnight`, `up_outside_plan_this_fortnight`, `up_report_plan`.

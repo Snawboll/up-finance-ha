@@ -41,8 +41,10 @@ def _month_add(month: str, delta: int) -> str:
 
 class Metrics:
     def __init__(self, db: Database, tz: ZoneInfo, budgets: Optional[dict[str, float]] = None,
-                 large_threshold: float = 200.0, today: Optional[date] = None):
+                 large_threshold: float = 200.0, today: Optional[date] = None,
+                 reserve_saver: str = "Savings"):
         self.db = db
+        self.reserve_saver = reserve_saver
         self.tz = tz
         self.budgets = budgets or {}
         self.large_threshold = large_threshold
@@ -373,6 +375,24 @@ class Metrics:
         return {"series": series}
 
     # -- savers (envelopes) -------------------------------------------------
+    def _topup(self, account_id: str) -> tuple[Optional[int], Optional[str], int]:
+        """A saver's regular automatic top-up: (amount in cents, cadence, times per year)."""
+        topups = self._q(
+            "SELECT local_date, amount_cents FROM transactions WHERE account_id=? AND amount_cents>0 "
+            "AND transfer_account_id IS NOT NULL AND description LIKE 'Auto Transfer%' "
+            "ORDER BY created_at DESC LIMIT 8", (account_id,))
+        cadence, per_year = None, 0
+        if len(topups) >= 2:
+            gaps = [_gap(b["local_date"], a["local_date"]) for a, b in zip(topups, topups[1:])]
+            med = statistics.median(gaps)
+            c = next((c for c in CADENCES if c[1] <= med <= c[2]), None)
+            if c:
+                cadence, per_year = c[0], c[3]
+        topup = topups[0]["amount_cents"] if topups and cadence else None
+        if topups and (self.today - date.fromisoformat(topups[0]["local_date"])).days > 45:
+            return None, None, 0  # auto top-up has stopped
+        return topup, cadence, (per_year if topup else 0)
+
     def savers(self, months: int = 6) -> list[dict]:
         """Per saver: regular top-up (its budget), what it covered, and where that money went."""
         t = self.today
@@ -383,20 +403,7 @@ class Metrics:
         out = []
         for acc in self._q("SELECT id, name, balance_cents FROM accounts WHERE type='SAVER' ORDER BY name"):
             aid = acc["id"]
-            topups = self._q(
-                "SELECT local_date, amount_cents FROM transactions WHERE account_id=? AND amount_cents>0 "
-                "AND transfer_account_id IS NOT NULL AND description LIKE 'Auto Transfer%' "
-                "ORDER BY created_at DESC LIMIT 8", (aid,))
-            cadence, per_year = None, 0
-            if len(topups) >= 2:
-                gaps = [_gap(b["local_date"], a["local_date"]) for a, b in zip(topups, topups[1:])]
-                med = statistics.median(gaps)
-                c = next((c for c in CADENCES if c[1] <= med <= c[2]), None)
-                if c:
-                    cadence, per_year = c[0], c[3]
-            topup = topups[0]["amount_cents"] if topups and cadence else None
-            if topups and (t - date.fromisoformat(topups[0]["local_date"])).days > 45:
-                topup, cadence = None, None  # auto top-up has stopped
+            topup, cadence, per_year = self._topup(aid)
             monthly_budget = round(topup * per_year / 12) if topup else None
 
             covered = {r["month"]: r["total"] for r in self._q(
@@ -455,6 +462,188 @@ class Metrics:
             })
         return sorted(out, key=lambda x: (x["monthly_budget"] is None, -(x["monthly_budget"] or 0), -x["balance"]))
 
+    # -- the fortnightly plan --------------------------------------------------
+    def _find_reserve(self, savers: list[dict]) -> Optional[dict]:
+        """The saver all income collects in and the fortnightly top-ups are paid from."""
+        want = _alnum(self.reserve_saver)
+        if not want:
+            return None
+        exact = [a for a in savers if _alnum(a["name"]) == want]
+        return (exact or [a for a in savers if want in _alnum(a["name"])] or [None])[0]
+
+    def _fortnights(self, n: int) -> list[tuple[date, date]]:
+        """The last n fortnights (oldest first), lined up with the savers' top-up day.
+
+        Each is (start, end) inclusive; the last one is the current, partial fortnight.
+        """
+        r = self._q("SELECT MAX(local_date) AS d FROM transactions WHERE amount_cents>0 "
+                    "AND description LIKE 'Auto Transfer%' AND account_id IN "
+                    "(SELECT id FROM accounts WHERE type='SAVER')")
+        t = self.today
+        anchor = date.fromisoformat(r[0]["d"]) if r and r[0]["d"] else t - timedelta(days=t.weekday())
+        start = anchor + timedelta(days=14 * ((t - anchor).days // 14))
+        return [(start - timedelta(days=14 * k), start - timedelta(days=14 * k - 13)) for k in range(n - 1, -1, -1)]
+
+    def plan(self, fortnights: int = 13) -> dict:
+        """How the household runs: all income lands in the reserve saver, fixed fortnightly
+        top-ups go from it to the other savers, and anything no topped-up saver pays for comes
+        out of the reserve ("outside the plan"). Everything is per fortnight."""
+        t = self.today
+        periods = self._fortnights(fortnights)
+        first = periods[0][0].isoformat()
+        starts = [p[0].isoformat() for p in periods]
+
+        def bucket(day: str) -> Optional[int]:
+            for i in range(len(starts) - 1, -1, -1):
+                if day >= starts[i]:
+                    return i
+            return None
+
+        def per_fn(rows, key="local_date", val="amt") -> list[int]:
+            out = [0] * len(periods)
+            for r in rows:
+                i = bucket(r[key])
+                if i is not None:
+                    out[i] += r[val] or 0
+            return out
+
+        accounts = self._q("SELECT id, name, balance_cents FROM accounts WHERE type='SAVER' ORDER BY name")
+        reserve = self._find_reserve(accounts)
+        rid = reserve["id"] if reserve else None
+        others = [a for a in accounts if a["id"] != rid]
+        other_ids = {a["id"] for a in others}
+
+        income = per_fn(self._q("SELECT local_date, SUM(amount_cents) AS amt FROM flows WHERE kind='income' "
+                                "AND local_date >= ? GROUP BY local_date", (first,)))
+        personal = per_fn(self._q("SELECT local_date, -SUM(amount_cents) AS amt FROM flows WHERE kind='allowance' "
+                                  "AND local_date >= ? GROUP BY local_date", (first,)))
+        spending = per_fn(self._q("SELECT local_date, -SUM(amount_cents) AS amt FROM flows WHERE kind='spending' "
+                                  "AND account_type != 'HOME_LOAN' AND local_date >= ? GROUP BY local_date", (first,)))
+
+        savers, into_savers = [], [0] * len(periods)
+        covered_by_plan = [0] * len(periods)
+        for a in others:
+            aid = a["id"]
+            topup, cadence, per_year = self._topup(aid)
+            used = per_fn(self._q(
+                "SELECT c.local_date, SUM(cl.amount_cents) AS amt FROM cover_links cl JOIN transactions c "
+                "ON c.id = cl.cover_id WHERE cl.saver_id=? AND c.local_date >= ? GROUP BY c.local_date",
+                (aid, first)))
+            for i, v in enumerate(used):
+                covered_by_plan[i] += v
+            loan = per_fn(self._q(
+                "SELECT local_date, -SUM(amount_cents) AS amt FROM transactions WHERE account_id=? AND amount_cents<0 "
+                "AND transfer_account_id IN (SELECT id FROM accounts WHERE type='HOME_LOAN') AND local_date >= ? "
+                "GROUP BY local_date", (aid, first)))
+            # Money put in from outside the other savers (top-ups and one-off moves from the reserve/spending).
+            put_in = per_fn(self._q(
+                "SELECT local_date, SUM(amount_cents) AS amt FROM transactions WHERE account_id=? AND amount_cents>0 "
+                "AND transfer_account_id IN (SELECT id FROM accounts) AND description NOT LIKE 'Cover%' "
+                f"AND transfer_account_id NOT IN ({','.join('?' * len(other_ids))}) AND local_date >= ? "
+                "GROUP BY local_date", (aid, *other_ids, first)))
+            for i, v in enumerate(put_in):
+                into_savers[i] += v
+            paid = [u + l for u, l in zip(used, loan)]
+            daily = self._daily_balances(aid, a["balance_cents"] or 0, periods[0][0] - timedelta(days=1))
+            full = paid[:-1]
+            savers.append({
+                "saver": a["name"],
+                "role": "spending" if any(paid) else "goal",
+                "top_up": d(topup) if topup else None,
+                "top_up_cadence": cadence,
+                "per_fortnight": d(round(topup * per_year / 26)) if topup else None,
+                "paid_out": [d(v) for v in paid],
+                "put_in": [d(v) for v in put_in],
+                "paid_out_avg": d(round(sum(full[-6:]) / max(1, len(full[-6:])))),
+                "balance": d(a["balance_cents"]),
+                "balance_at_start": d(daily.get((periods[0][0] - timedelta(days=1)).isoformat(), 0)),
+                "balance_by_fortnight": [d(daily.get(min(e, t).isoformat(), 0)) for _, e in periods],
+            })
+        savers.sort(key=lambda x: (x["role"] != "spending", -(x["per_fortnight"] or 0), -x["balance"]))
+
+        # Outside the plan = spending no topped-up saver paid for. Measured from cover totals, so a
+        # cover that couldn't be matched to its purchase still counts for its saver.
+        outside = [max(0, s - c) for s, c in zip(spending, covered_by_plan)]
+        names = self.category_names()
+        parents = {r["id"]: r["parent_id"] for r in self._q("SELECT id, parent_id FROM categories")}
+        excl = f"AND (covered_by_id IS NULL OR covered_by_id NOT IN ({','.join('?' * len(other_ids))}))" \
+            if other_ids else ""
+        rows = self._q(
+            "SELECT local_date, category, parent_category, description, -amount_cents AS amt, covered_by_id, message "
+            f"FROM flows WHERE kind='spending' AND account_type != 'HOME_LOAN' AND local_date >= ? {excl}",
+            (first, *other_ids))
+        by_cat: dict[str, list[int]] = defaultdict(lambda: [0] * len(periods))
+        cat_parent: dict[str, str] = {}
+        for r in rows:
+            cat_parent.setdefault(r["category"], r["parent_category"] or "uncategorised")
+            i = bucket(r["local_date"])
+            if i is not None:
+                by_cat[r["category"]][i] += r["amt"]
+        full_n = max(1, len(periods) - 1)
+        categories = sorted(({
+            "category": c, "name": names.get(c, c),
+            "parent": parents.get(c) or cat_parent.get(c) or "uncategorised",
+            "this_fortnight": d(v[-1]), "per_fortnight": d(round(sum(v[:-1]) / full_n)),
+            "total": d(sum(v[:-1])), "by_fortnight": [d(x) for x in v],
+        } for c, v in by_cat.items()), key=lambda x: -x["total"])
+        for c in categories:
+            c["parent_name"] = names.get(c["parent"], c["parent"].replace("-", " ").title())
+        recent_from = periods[-6][0].isoformat() if len(periods) >= 6 else first
+        purchases = sorted((r for r in rows if r["local_date"] >= recent_from and r["amt"] > 0),
+                           key=lambda r: -r["amt"])[:20]
+
+        reserve_out = None
+        full_out = outside[:-1]
+        avg = lambda xs: round(sum(xs) / max(1, len(xs)))  # noqa: E731
+        plan_fn = sum(round((sv["per_fortnight"] or 0) * 100) for sv in savers)
+        outgoings = plan_fn + avg(full_out) + avg(personal[:-1])
+        if reserve:
+            daily = self._daily_balances(rid, reserve["balance_cents"] or 0, periods[0][0])
+            bal = reserve["balance_cents"] or 0
+            reserve_out = {
+                "saver": reserve["name"],
+                "balance": d(bal),
+                "balance_by_fortnight": [d(daily.get(min(e, t).isoformat(), 0)) for _, e in periods],
+                "balance_at_start_of_fortnight": d(daily.get((periods[-1][0] - timedelta(days=1)).isoformat(),
+                                                             daily.get(periods[-1][0].isoformat(), bal))),
+                "runway_fortnights": round(bal / outgoings, 1) if outgoings > 0 else None,
+            }
+        income_26 = self._q("SELECT COALESCE(SUM(amount_cents),0) AS s, MIN(local_date) AS f FROM flows "
+                            "WHERE kind='income' AND local_date >= ? AND local_date < ?",
+                            ((periods[-1][0] - timedelta(days=364)).isoformat(), periods[-1][0].isoformat()))[0]
+        first_txn = self._q("SELECT MIN(local_date) AS f FROM transactions")[0]["f"]
+        n26 = 26
+        if first_txn:
+            n26 = max(1, min(26, (periods[-1][0] - date.fromisoformat(first_txn)).days // 14))
+        income_avg = round(income_26["s"] / n26)
+        return {
+            "reserve": reserve_out,
+            "reserve_saver_setting": self.reserve_saver,
+            "fortnights": [{"start": s_.isoformat(), "end": e.isoformat()} for s_, e in periods],
+            "current": {"start": periods[-1][0].isoformat(), "end": periods[-1][1].isoformat(),
+                        "day": (t - periods[-1][0]).days + 1},
+            "income": [d(v) for v in income],
+            "into_savers": [d(v) for v in into_savers],
+            "outside_plan": [d(v) for v in outside],
+            "personal": [d(v) for v in personal],
+            "summary": {
+                "plan_per_fortnight": d(plan_fn),
+                "outside_plan_avg": d(avg(full_out)),
+                "personal_avg": d(avg(personal[:-1])),
+                "outgoings_per_fortnight": d(outgoings),
+                "income_avg_per_fortnight": d(income_avg),
+                "income_fortnights_averaged": n26,
+                "income_covers_pct": round(income_avg / outgoings * 100) if outgoings else None,
+            },
+            "savers": savers,
+            "outside_categories": categories,
+            "outside_purchases": [{
+                "date": r["local_date"], "merchant": r["description"], "category": names.get(r["category"], r["category"]),
+                "amount": d(r["amt"]), "message": r["message"],
+                "paid_from": "reserve" if rid and r["covered_by_id"] == rid else "no saver",
+            } for r in purchases],
+        }
+
     def transactions(self, q: str = "", month: str = "", category: str = "",
                      kind: str = "", limit: int = 200, offset: int = 0) -> list[dict]:
         where, params = ["1=1"], []
@@ -495,7 +684,12 @@ class Metrics:
             "large_transactions_30d": self.large_transactions(30, 15),
             "new_merchants_30d": self.new_merchants(30),
             "savers": self.savers(),
+            "plan": self.plan(),
         }
+
+
+def _alnum(text: str) -> str:
+    return "".join(ch for ch in str(text or "").lower() if ch.isalnum())
 
 
 def _gap(a: str, b: str) -> int:

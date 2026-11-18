@@ -48,6 +48,7 @@ def load_options() -> dict:
     opts.setdefault("account_scope", "joint")
     opts.setdefault("ignore_payees", [])
     opts.setdefault("payee_rules", [])
+    opts.setdefault("reserve_saver", "Savings")
     return opts
 
 
@@ -76,7 +77,8 @@ def main() -> None:
     db = Database(data_dir / "up_finance.db")
     n = db.set_rules(parse_rules(opts["payee_rules"], opts["ignore_payees"]))
     log.info("Payee rules matched %d transactions", n)
-    metrics = Metrics(db, tz, parse_budgets(opts["budgets"]), float(opts["large_transaction_threshold"]))
+    metrics = Metrics(db, tz, parse_budgets(opts["budgets"]), float(opts["large_transaction_threshold"]),
+                      reserve_saver=str(opts.get("reserve_saver") or ""))
     ha = HomeAssistant()
 
     token = str(opts.get("up_token") or "")
