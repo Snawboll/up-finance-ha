@@ -24,17 +24,18 @@ See [up_finance/DOCS.md](up_finance/DOCS.md) for options, sensors and the data A
 
 ## Claude spending reviews
 
-[`skills/spending-review/SKILL.md`](skills/spending-review/SKILL.md) is a Claude skill. It reads
+[`.claude/skills/spending-review/SKILL.md`](.claude/skills/spending-review/SKILL.md) is a Claude skill. It reads
 the data either from the read-only API (on your home network) or from the `sensor.up_*`
 entities through the Home Assistant connector (anywhere, including the phone app). Then it
 writes a review, e.g. `/spending-review last 3 months, focus dining`.
 
-[`skills/up-payee-rules/SKILL.md`](skills/up-payee-rules/SKILL.md) lets Claude categorise
+[`.claude/skills/up-payee-rules/SKILL.md`](.claude/skills/up-payee-rules/SKILL.md) lets Claude categorise
 uncategorised payments for you by managing the add-on's payee rules through the Home Assistant
 connector. It previews each change and asks before saving.
 
-To use the skills in Claude Code, copy them to `~/.claude/skills/`. To use it in the
-Claude apps, zip each skill folder and upload it under **Settings → Capabilities → Skills**.
+Claude Code loads these skills automatically in this repository. To use them in other projects,
+copy them to `~/.claude/skills/`. To use them in the Claude apps, zip each skill folder and upload
+it on the web or desktop app under **Customize → Skills → + → Create skill → Upload a skill**.
 
 ## Development
 
