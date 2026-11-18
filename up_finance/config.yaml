@@ -1,0 +1,43 @@
+name: Up Finance
+version: "0.2.0"
+slug: up_finance
+description: Stores your Up Bank transactions locally and builds a spending dashboard
+url: https://github.com/Snawboll/up-finance-ha
+arch:
+  - aarch64
+  - amd64
+  - armv7
+init: true
+startup: application
+boot: auto
+homeassistant_api: true
+ingress: true
+ingress_port: 8099
+panel_icon: mdi:cash-multiple
+panel_title: Finance
+ports:
+  8098/tcp: null
+ports_description:
+  8098/tcp: Read-only data API for Claude analysis (needs api_key; leave blank to disable)
+backup: hot
+options:
+  up_token: ""
+  api_key: ""
+  account_scope: joint
+  sync_interval_minutes: 30
+  large_transaction_threshold: 200
+  budgets: []
+  ignore_payees: []
+  log_level: info
+schema:
+  up_token: password
+  api_key: password?
+  account_scope: list(joint|all)
+  sync_interval_minutes: int(5,1440)
+  large_transaction_threshold: float(0,)
+  budgets:
+    - category: str
+      monthly: float(0,)
+  ignore_payees:
+    - str
+  log_level: list(debug|info|warning|error)

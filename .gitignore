@@ -1,0 +1,9 @@
+__pycache__/
+*.pyc
+*.db
+*.db-wal
+*.db-shm
+.dev-data/
+.env
+.dev-data-sync.log
+.claude/
