@@ -506,7 +506,7 @@ function renderPlan(plan) {
     return `<div class="saver"><div class="head"><b>${esc(x.saver)}</b><span>${fmt0(now)}${b ? " / " + fmt0(b) : ""}</span></div>
       ${b ? `<div class="meter"><div style="width:${Math.min(100, now / b * 100)}%;background:${st[0]}"></div></div>` : ""}
       <div class="meta">${b ? `${fmt0(b)} a fortnight` + (x.top_up_cadence !== "fortnightly" ? ` (${fmt0(x.top_up)} ${esc(x.top_up_cadence)})` : "") : "No regular top-up"} · balance ${fmt0(x.balance)} (${change(x)})</div>
-      ${st ? `<div class="meta">${st[1]} · paid out ${fmt0(x.paid_out_avg)} a fortnight on average (${avgPct}%)</div>` : `<div class="meta">Paid out ${fmt0(x.paid_out_avg)} a fortnight on average</div>`}</div>`;
+      ${st ? `<div class="meta">${st[1]} · paid out ${fmt0(x.paid_out_avg)} a fortnight on average over ${F.length - 1} fortnights (${avgPct}%)</div>` : `<div class="meta">Paid out ${fmt0(x.paid_out_avg)} a fortnight on average</div>`}</div>`;
   }).join("")}</div>`;
   $("plan-goals").innerHTML = goals.length ? `<div class="savers">${goals.map(x => {
     const added = x.put_in.slice(0, last).reduce((a, v) => a + v, 0) / Math.max(1, last);

@@ -513,10 +513,13 @@ class Metrics:
         others = [a for a in accounts if a["id"] != rid]
         other_ids = {a["id"] for a in others}
 
-        income = per_fn(self._q("SELECT local_date, SUM(amount_cents) AS amt FROM flows WHERE kind='income' "
-                                "AND local_date >= ? GROUP BY local_date", (first,)))
+        # Money moved in from a personal account counts as income to the household; personal money
+        # is only what goes out to personal accounts.
+        income = per_fn(self._q("SELECT local_date, SUM(amount_cents) AS amt FROM flows WHERE (kind='income' "
+                                "OR (kind='allowance' AND amount_cents>0)) AND local_date >= ? GROUP BY local_date",
+                                (first,)))
         personal = per_fn(self._q("SELECT local_date, -SUM(amount_cents) AS amt FROM flows WHERE kind='allowance' "
-                                  "AND local_date >= ? GROUP BY local_date", (first,)))
+                                  "AND amount_cents<0 AND local_date >= ? GROUP BY local_date", (first,)))
         spending = per_fn(self._q("SELECT local_date, -SUM(amount_cents) AS amt FROM flows WHERE kind='spending' "
                                   "AND account_type != 'HOME_LOAN' AND local_date >= ? GROUP BY local_date", (first,)))
 
@@ -554,7 +557,8 @@ class Metrics:
                 "per_fortnight": d(round(topup * per_year / 26)) if topup else None,
                 "paid_out": [d(v) for v in paid],
                 "put_in": [d(v) for v in put_in],
-                "paid_out_avg": d(round(sum(full[-6:]) / max(1, len(full[-6:])))),
+                # over all full fortnights: monthly items (loan repayments) land 2 or 3 times in 6
+                "paid_out_avg": d(round(sum(full) / max(1, len(full)))),
                 "balance": d(a["balance_cents"]),
                 "balance_at_start": d(daily.get((periods[0][0] - timedelta(days=1)).isoformat(), 0)),
                 "balance_by_fortnight": [d(daily.get(min(e, t).isoformat(), 0)) for _, e in periods],
@@ -609,7 +613,8 @@ class Metrics:
                 "runway_fortnights": round(bal / outgoings, 1) if outgoings > 0 else None,
             }
         income_26 = self._q("SELECT COALESCE(SUM(amount_cents),0) AS s, MIN(local_date) AS f FROM flows "
-                            "WHERE kind='income' AND local_date >= ? AND local_date < ?",
+                            "WHERE (kind='income' OR (kind='allowance' AND amount_cents>0)) "
+                            "AND local_date >= ? AND local_date < ?",
                             ((periods[-1][0] - timedelta(days=364)).isoformat(), periods[-1][0].isoformat()))[0]
         first_txn = self._q("SELECT MIN(local_date) AS f FROM transactions")[0]["f"]
         n26 = 26

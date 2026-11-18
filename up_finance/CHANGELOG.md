@@ -41,3 +41,9 @@
 - Monthly charts moved into a collapsed "Monthly view".
 - New `/api/plan` endpoint and sensors: `up_reserve_balance`, `up_reserve_runway`,
   `up_outgoings_per_fortnight`, `up_outside_plan_this_fortnight`, `up_report_plan`.
+
+## 0.5.1
+- Money moved in from personal accounts counts as household income in the fortnightly plan,
+  instead of reducing personal money.
+- Spending savers' average is taken over 12 fortnights, so a monthly loan repayment landing two
+  or three times in a shorter window doesn't distort it.

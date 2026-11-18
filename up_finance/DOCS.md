@@ -112,7 +112,8 @@ top-ups go from there into the other savers. Spending doesn't depend on when pay
 - **Going out per fortnight** = the savers' top-ups (the plan) + average spending outside the plan
   + average personal money (transfers to individual accounts).
 - **Income per fortnight** is averaged over the last 26 fortnights, so one late or large invoice
-  doesn't swing it.
+  doesn't swing it. Money moved in from a personal account counts as income; **personal** is only
+  money moved out to personal accounts.
 - **Spending savers** pay for things with Cover; their top-up is their budget for the fortnight.
   **Goal savers** only build up (e.g. a holiday or a child's account).
 - **Outside the plan** is spending that no topped-up saver paid for: it came out of the reserve
