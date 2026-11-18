@@ -1,8 +1,9 @@
 """HTTP servers: the dashboard (via HA ingress) and the read-only data API (LAN).
 
 Two listeners share one handler:
-- ingress  (port 8099, internal): only accepts the Supervisor ingress proxy
-  (172.30.32.2). No auth needed - Home Assistant already authenticated the user.
+- ingress  (port 8099, internal): only accepts Home Assistant's internal network
+  (172.30.32.0/23: the ingress proxy and other apps such as the HA MCP server).
+  The port is never mapped to the host, so nothing on your LAN can reach it.
 - lan      (port 8098, exposed): every request needs `Authorization: Bearer <api_key>`.
   Adds /api/query (read-only SQL) and /api/export.csv for ad-hoc analysis.
 """
@@ -10,6 +11,7 @@ from __future__ import annotations
 
 import csv
 import hmac
+import ipaddress
 import io
 import json
 import logging
@@ -29,6 +31,9 @@ log = logging.getLogger(__name__)
 
 STATIC = Path(__file__).parent / "static"
 INGRESS_PROXY = "172.30.32.2"
+# The Supervisor's internal Docker network. Only Home Assistant and its apps can reach it
+# (the ingress port is never mapped to the host), e.g. the HA MCP server Claude connects through.
+HASSIO_NETWORK = ipaddress.ip_network("172.30.32.0/23")
 MAX_ROWS = 5000
 QUERY_TIMEOUT_S = 10
 
@@ -107,7 +112,11 @@ class Handler(BaseHTTPRequestHandler):
         if self.mode == "dev":
             return True
         if self.mode == "ingress":
-            return self.client_address[0] in (INGRESS_PROXY, "127.0.0.1")
+            ip = self.client_address[0]
+            try:
+                return ip == "127.0.0.1" or ipaddress.ip_address(ip) in HASSIO_NETWORK
+            except ValueError:
+                return False
         # lan
         if len(self.app.api_key) < 16:
             return False

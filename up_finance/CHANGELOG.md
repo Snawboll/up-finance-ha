@@ -20,3 +20,7 @@
 ## 0.4.0
 - Rule endpoints for Claude: `/api/uncategorised`, `/api/rules`, `/api/rules/preview` (dry run).
 - New `up-payee-rules` skill: Claude manages payee rules through the Home Assistant connector.
+
+## 0.4.1
+- Accept requests from Home Assistant's internal network (e.g. the HA MCP server), so Claude's
+  Home Assistant connector can read the data and preview rules.
