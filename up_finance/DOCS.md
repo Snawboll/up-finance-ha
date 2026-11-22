@@ -114,7 +114,7 @@ slip through each fortnight. **To reconcile** (at the top of the dashboard, and 
 |---|---|---|
 | **Cover** | A purchase no saver paid for. The saver shown is the one that usually pays that merchant or category. | Money in |
 | **Forward** | Money that came in and should move on: income, Medicare rebates and refunds. Income goes to the reserve saver. | Money out |
-| **Return** | A cover with no purchase to match, e.g. the same bill covered twice | Money out |
+| **Return** | A cover, or a transfer in from a saver, with no purchase to match, e.g. the same bill covered twice | Money out |
 | **Send** | A regular automatic transfer that ran in at least 3 of the last 4 cycles but not this one | Money out |
 
 The list starts from when you last marked the account as reconciled. If you've never marked it,

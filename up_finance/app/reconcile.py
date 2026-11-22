@@ -7,7 +7,8 @@ module lists each one and the action that puts the account back on its float:
   cover     a purchase nobody covered from a saver                (money in when fixed)
   forward   money that came in and should move on: income, rebates
             and refunds                                             (money out when fixed)
-  return    a cover with no purchase to match, e.g. a double cover (money out when fixed)
+  return    a cover, or a transfer in from a saver, with no purchase
+            to match, e.g. a double cover                          (money out when fixed)
   transfer  a regular automatic transfer that didn't run this cycle (money out when fixed)
 
 Items count from the last time you marked the account as reconciled (POST
@@ -34,6 +35,7 @@ from .db import Database
 
 LOOKBACK_DAYS = 120       # history used to find cycles and the auto start point
 COVER_SUM_WINDOW = 60     # a lump cover can pay for purchases up to this many days earlier
+PRE_WINDOW = 14           # ... or up to this many days later (money moved in before paying)
 SETTLE_WINDOW = 45        # a transfer out can settle items up to this many days earlier
 CYCLE_HISTORY = 4         # an automatic transfer is expected if it ran in >= 3 of the last 4 cycles
 CYCLE_MIN_HITS = 3
@@ -201,11 +203,15 @@ class Reconciler:
 
         # 2. Covers with no purchase: first try them as one cover for several purchases.
         spare_covers = []
+        def is_topup(t):  # a manual transfer in from one of our savers, e.g. "Transfer from Bills"
+            return t["amount_cents"] > 0 and t["transfer_name"] and t["kind"] == "transfer" \
+                and not is_cover(t) and not str(t["description"]).startswith("Auto Transfer")
+
         for t in after:
-            if is_cover(t) and not t["cover_spend_id"]:
-                window = t["_ts"] - COVER_SUM_WINDOW * 86400
+            if (is_cover(t) and not t["cover_spend_id"]) or is_topup(t):
+                lo, hi = t["_ts"] - COVER_SUM_WINDOW * 86400, t["_ts"] + PRE_WINDOW * 86400
                 cands = [(i["id"], i["_cents"]) for i in uncovered
-                         if not i.get("_done") and window <= i["_ts"] <= t["_ts"]]
+                         if not i.get("_done") and lo <= i["_ts"] <= hi]
                 hit = subset_sum(t["amount_cents"], cands)
                 if hit:
                     for i in uncovered:
@@ -214,7 +220,8 @@ class Reconciler:
                     continue
                 saver = t["transfer_name"] or str(t["description"]).split(" from ", 1)[-1]
                 spare_covers.append(add(t, "return", t["amount_cents"], -t["amount_cents"], saver,
-                                        "Cover with no matching purchase"))
+                                        "Cover with no matching purchase" if is_cover(t)
+                                        else "Transfer in with no matching purchase"))
 
         # 3. Money in to pass on: income, rebates and refunds.
         for t in after:

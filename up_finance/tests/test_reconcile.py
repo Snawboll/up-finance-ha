@@ -51,6 +51,10 @@ def build(tmp: str) -> Database:
         cycle += timedelta(days=14)
     t("2026-10-23", "Cover from Daily Expenses", 54.97, "13:22", transfer=DE)  # pre-cover, Costco pending
     # --- since the last time the account was on its float (end of 24 Oct) ---
+    t("2026-10-26", "Transfer from Bills", 2366, "13:49", transfer=BILLS)  # paid the rates, 60c short
+    t("2026-10-26", "QPRC", -2366.60, "13:51")
+    t("2026-10-26", "Transfer from Savings", 291.32, "14:00", transfer=SAV)  # top-up for the second bill
+    t("2026-10-26", "QPRC", -291.32, "14:02")
     t("2026-10-26", "Queanbeyan Dental", -530, "11:00", category="health-and-medical")
     t("2026-10-27", "Woolworths", -100, "15:00", category="groceries")
     t("2026-10-27", "Cover from Daily Expenses", 100, "15:00", transfer=DE)
@@ -103,6 +107,8 @@ class ReconcileTests(unittest.TestCase):
         got = [(i["action"], i["payee"], i["amount"]) for i in r["items"]]
         self.assertEqual(got, [
             ("cover", "Queanbeyan Dental", 530.0),
+            ("return", "Transfer from Bills", 2366.0),
+            ("cover", "QPRC", 2366.6),
             ("return", "Cover from Bills", 13.99),
             ("forward", "MCARE BENEFITS", 45.05),
             ("forward", "Medicare", 108.95),
@@ -114,7 +120,8 @@ class ReconcileTests(unittest.TestCase):
         self.assertEqual(by_payee["MCARE BENEFITS"]["suggested"], "💰 Savings")  # the reserve
         self.assertEqual(by_payee["Cover from Bills"]["suggested"], "🧾 Bills")
         self.assertIn("19 Nov", by_payee["Transfer to $klongwinter"]["note"])
-        self.assertEqual(r["totals"], {"cover": 736.0, "forward": 154.0, "return": 13.99, "transfer": 150.0})
+        self.assertEqual(r["totals"], {"cover": 3102.6, "forward": 154.0, "return": 2379.99,
+                                       "transfer": 150.0})
         # doing every action puts the account exactly back on its float
         self.assertEqual(r["projected_balance"], 1000.0)
         self.assertEqual(r["off_by"], 0.0)
@@ -140,7 +147,7 @@ class ReconcileTests(unittest.TestCase):
     def test_sensors(self):
         s = build_sensors(Metrics(self.db, TZ, today=TODAY), self.rec)
         state, attrs = s["sensor.up_reconcile"]
-        self.assertEqual(state, 6)
+        self.assertEqual(state, 8)
         self.assertEqual(attrs["items"][0]["payee"], "Queanbeyan Dental")
         self.assertEqual(s["sensor.up_float_gap"][0], round(1000 - attrs["balance"], 2))
         # no float configured: still lists items, no gap sensor
@@ -197,7 +204,7 @@ class ReconcileWebTests(unittest.TestCase):
 
     def test_reconcile_endpoints(self):
         code, body = self.call(self.ingress, "/api/reconcile")
-        self.assertEqual((code, body["count"]), (200, 6))
+        self.assertEqual((code, body["count"]), (200, 8))
         key = {"Authorization": "Bearer " + "k" * 24}
         self.assertEqual(self.call(self.lan, "/api/reconcile", headers=key)[0], 200)
         self.assertEqual(self.call(self.lan, "/api/reconcile/mark", {}, key)[0], 403)  # LAN stays read-only
@@ -208,7 +215,7 @@ class ReconcileWebTests(unittest.TestCase):
         self.assertEqual(self.call(self.ingress, "/api/reconcile")[1]["count"], 0)
         self.assertEqual(self.call(self.ingress, "/api/reconcile/mark", {"clear": True})[1],
                          {"reconciled_at": None})
-        self.assertEqual(self.call(self.ingress, "/api/reconcile")[1]["count"], 6)
+        self.assertEqual(self.call(self.ingress, "/api/reconcile")[1]["count"], 8)
 
 
 if __name__ == "__main__":
