@@ -23,6 +23,9 @@ spending sensors, and puts a **Finance** dashboard in the sidebar.
 | `payee_rules` | Re-categorise payments Up leaves uncategorised (rates, childcare, payments through an old bank account). See below. |
 | `sync_interval_minutes` | How often to sync (5–1440, default 30). |
 | `reserve_saver` | The saver all your income collects in, which the fortnightly top-ups are paid from (default `Savings`). Matched by name, ignoring emoji and case. Leave blank if you don't run your money this way. |
+| `float_target` | The float you keep in the spending account, in dollars (e.g. `1000`). Turns on the float gap in **To reconcile**. `0` (default) still lists the items, without a target. |
+| `float_account` | The spending account to reconcile, matched by name (default: the first joint spending account, e.g. `2Up Spending`). |
+| `reconcile_button` | A Home Assistant button that marks the account as reconciled when pressed (default `input_button.up_finance_reconciled`). See below. |
 | `large_transaction_threshold` | Spending at or above this many dollars is listed as a large transaction (default 200). |
 | `budgets` | Optional monthly budgets, keyed by Up category id. |
 | `log_level` | `debug`, `info`, `warning` or `error`. |
@@ -101,6 +104,40 @@ purchase it paid for (same amount, close in time). Then it shows, for each saver
 - what it paid out this month and on average over the last 3 months (covers plus direct home loan repayments)
 - which categories and merchants it paid for, and whether its balance is growing or shrinking
 
+## Reconciling the float
+
+If you keep a fixed float in the spending account and pay for things with Cover, a few payments
+slip through each fortnight. **To reconcile** (at the top of the dashboard, and in
+`sensor.up_reconcile`) lists each one and what to do with it:
+
+| Action | What it is | Effect on the spending account |
+|---|---|---|
+| **Cover** | A purchase no saver paid for. The saver shown is the one that usually pays that merchant or category. | Money in |
+| **Forward** | Money that came in and should move on: income, Medicare rebates and refunds. Income goes to the reserve saver. | Money out |
+| **Return** | A cover with no purchase to match, e.g. the same bill covered twice | Money out |
+| **Send** | A regular automatic transfer that ran in at least 3 of the last 4 cycles but not this one | Money out |
+
+The list starts from when you last marked the account as reconciled. If you've never marked it,
+it starts from the last day the balance ended at or above `float_target`. An item drops off by
+itself when you deal with it:
+
+- a cover for the same amount, even weeks later (covers are matched to purchases up to 60 days
+  back, and to purchases up to 14 days *after* the cover, for pre-authorisations such as Costco
+  and fuel), or one cover for the exact total of several purchases;
+- a transfer to a saver for the same amount, or for the exact total of several items (e.g. all
+  of a fortnight's Medicare rebates in one go);
+- a catch-up transfer to the account a missed automatic transfer goes to.
+
+The summary shows the balance after every action. If that isn't exactly the float, something
+else moved money (or the list started from a day you were already over or under). Once it's
+right, mark the account as reconciled so the next list starts clean:
+
+- the **Mark as reconciled** button on the dashboard, or
+- a Home Assistant button. Create a **Button** helper (Settings → Devices & services → Helpers →
+  Create helper → Button) named `Up Finance reconciled`, so its entity is
+  `input_button.up_finance_reconciled`. The add-on checks it every minute. Pressing it from a
+  dashboard or an automation marks the account as reconciled at the time of the press.
+
 ## The fortnightly plan
 
 The dashboard is built around one way of running money, which suits irregular income (contracting,
@@ -138,6 +175,8 @@ are still there, in **Monthly view** at the bottom of the page.
 | `sensor.up_reserve_balance`, `sensor.up_reserve_runway` | The reserve saver's balance, and how many fortnights it would last with no income |
 | `sensor.up_outgoings_per_fortnight` | Plan + outside-the-plan average + personal (attributes: each part, income average, % covered by income) |
 | `sensor.up_outside_plan_this_fortnight` | Spending outside the plan so far this fortnight (attributes: average, top categories) |
+| `sensor.up_reconcile` | Number of payments to reconcile (attributes: balance, float, gap, totals per action, balance after reconciling, and the items) |
+| `sensor.up_float_gap` | How far the spending account is below its float (negative = over). Only with `float_target` set |
 | `sensor.up_report_*` | Data blocks (monthly history, categories, recurring, merchants, large transactions) that Claude reads through the Home Assistant connector |
 | `sensor.up_last_sync` | Time of the last successful sync |
 
@@ -161,6 +200,8 @@ and restart the add-on. Every request needs `Authorization: Bearer <api_key>`:
 - `GET /api/schema` lists the tables and views.
 - `POST /api/query` with `{"sql": "SELECT ..."}` runs a read-only query (5,000 rows, 10 seconds max).
 - `GET /api/export.csv` downloads all transactions.
+- `GET /api/reconcile` lists the payments to reconcile. Marking the account as reconciled
+  (`POST /api/reconcile/mark`) only works from Home Assistant and the dashboard, not this port.
 
 The data is opened read-only. Leave the port unmapped if you don't need it.
 

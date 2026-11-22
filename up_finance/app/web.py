@@ -25,6 +25,7 @@ from urllib.parse import parse_qs, urlparse
 
 from .db import Database
 from .metrics import Metrics
+from .reconcile import Reconciler
 from .rules import parse_rules, preview_rules
 
 log = logging.getLogger(__name__)
@@ -75,7 +76,10 @@ class App:
     """Shared state for the handlers."""
 
     def __init__(self, db: Database, metrics: Metrics, api_key: str = "",
-                 trigger_sync: Optional[Callable[[], dict]] = None, sync_progress: Optional[dict] = None):
+                 trigger_sync: Optional[Callable[[], dict]] = None, sync_progress: Optional[dict] = None,
+                 reconciler: Optional[Reconciler] = None, on_reconciled: Optional[Callable[[], None]] = None):
+        self.reconciler = reconciler
+        self.on_reconciled = on_reconciled
         self.db = db
         self.metrics = metrics
         self.api_key = api_key or ""
@@ -153,6 +157,8 @@ class Handler(BaseHTTPRequestHandler):
                 "/api/category_list": lambda: [
                     {"id": k, "name": v} for k, v in sorted(m.category_names().items(), key=lambda x: x[1])],
                 "/api/report": lambda: m.report(),
+                "/api/reconcile": lambda: (self.app.reconciler.report() if self.app.reconciler
+                                           else {"enabled": False, "items": [], "count": 0}),
                 "/api/rules": lambda: self._rules(),
                 "/api/uncategorised": lambda: self._uncategorised(int(q.get("days", 365)), int(q.get("limit", 30))),
                 "/api/health": lambda: {"ok": True, "last_sync_at": self.app.db.get_state("last_sync_at"),
@@ -188,6 +194,11 @@ class Handler(BaseHTTPRequestHandler):
                 return self._json(self.app.trigger_sync())
             except Exception as e:
                 return self._error(502, str(e))
+        if path == "/api/reconcile/mark":
+            # The only write in the API, so it's kept off the LAN listener (which stays read-only).
+            if self.mode == "lan":
+                return self._error(403, "Mark as reconciled from Home Assistant or the dashboard")
+            return self._json(self._mark_reconciled(data))
         if path == "/api/rules/preview":
             conn = self.app.db.connect_readonly()
             try:
@@ -204,6 +215,28 @@ class Handler(BaseHTTPRequestHandler):
             except sqlite3.Error as e:
                 return self._error(400, f"SQL error: {e}")
         return self._error(404, "Not found")
+
+    def _mark_reconciled(self, data: dict) -> dict:
+        """Record that the spending account is reconciled up to now (or {"at": ISO time}).
+        {"clear": true} removes the mark, so items count from the last time the account was on its float."""
+        from datetime import datetime, timezone
+        if data.get("clear"):
+            at = ""
+        elif data.get("at"):
+            at = datetime.fromisoformat(str(data["at"]).replace("Z", "+00:00")).isoformat()
+        else:
+            at = datetime.now(timezone.utc).isoformat(timespec="seconds")
+        with self.app.db.writer() as conn:
+            if at:
+                self.app.db.set_state(conn, "reconciled_at", at)
+            else:
+                conn.execute("DELETE FROM sync_state WHERE key='reconciled_at'")
+        if self.app.on_reconciled:
+            try:
+                self.app.on_reconciled()
+            except Exception as e:  # pragma: no cover
+                log.warning("Republishing after reconcile failed: %s", e)
+        return {"reconciled_at": at or None}
 
     def _rules(self) -> dict:
         """The rules currently in force (from the add-on options) and what each matches."""
