@@ -58,3 +58,7 @@
   `GET /api/reconcile`.
 - Covers match purchases up to 60 days earlier (was 14), and purchases up to 14 days after the
   cover (pre-authorisations that settle as a new transaction).
+
+## 0.6.1
+- The first press of a newly created reconcile button now marks the account as reconciled
+  (it was only remembered, because a never-pressed button has no time yet).

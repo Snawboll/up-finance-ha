@@ -172,6 +172,19 @@ class ReconcileTests(unittest.TestCase):
         ha.state = "unavailable"
         self.assertFalse(check_button(self.db, ha, "input_button.x"))
 
+    def test_first_press_of_a_new_button_counts(self):
+        class FakeHA:
+            state = "unknown"  # never pressed
+
+            def get_state(self, _):
+                return self.state
+
+        ha = FakeHA()
+        self.assertFalse(check_button(self.db, ha, "input_button.new"))
+        ha.state = "2026-11-22T02:00:00+00:00"
+        self.assertTrue(check_button(self.db, ha, "input_button.new"))
+        self.assertEqual(self.db.get_state("reconciled_at"), "2026-11-22T02:00:00+00:00")
+
 
 class ReconcileWebTests(unittest.TestCase):
     def setUp(self):
