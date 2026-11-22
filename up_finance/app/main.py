@@ -72,9 +72,14 @@ def check_button(db: Database, ha: HomeAssistant, entity_id: str) -> bool:
     button we only remember its state, so installing or restarting never marks anything.
     """
     state = ha.get_state(entity_id)
-    if not state or state in ("unknown", "unavailable"):
+    if not state or state == "unavailable":
         return False
     seen = db.get_state("reconcile_button_seen")
+    if state == "unknown":  # a new button that has never been pressed: its first press counts
+        if seen is None:
+            with db.writer() as conn:
+                db.set_state(conn, "reconcile_button_seen", state)
+        return False
     if state == seen:
         return False
     with db.writer() as conn:

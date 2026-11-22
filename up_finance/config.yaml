@@ -1,5 +1,5 @@
 name: Up Finance
-version: "0.6.0"
+version: "0.6.1"
 slug: up_finance
 description: Stores your Up Bank transactions locally and builds a spending dashboard
 url: https://github.com/Snawboll/up-finance-ha
