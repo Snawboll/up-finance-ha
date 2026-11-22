@@ -47,3 +47,14 @@
   instead of reducing personal money.
 - Spending savers' average is taken over 12 fortnights, so a monthly loan repayment landing two
   or three times in a shorter window doesn't distort it.
+
+## 0.6.0
+- **To reconcile**: lists what needs doing to get the spending account back to its float
+  (`float_target`): purchases nobody covered, income, rebates and refunds to forward, covers with
+  no purchase, and regular automatic transfers that didn't run. Items drop off when a later cover
+  or transfer settles them, including one cover or transfer for the total of several items.
+- Mark the account as reconciled from the dashboard or a Home Assistant button helper
+  (`reconcile_button`); new `sensor.up_reconcile` and `sensor.up_float_gap`, and
+  `GET /api/reconcile`.
+- Covers match purchases up to 60 days earlier (was 14), and purchases up to 14 days after the
+  cover (pre-authorisations that settle as a new transaction).

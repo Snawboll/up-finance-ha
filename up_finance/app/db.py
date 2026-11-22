@@ -94,7 +94,7 @@ CREATE TABLE IF NOT EXISTS cover_links (
     spend_id TEXT,
     saver_id TEXT NOT NULL,
     amount_cents INTEGER NOT NULL,
-    match_type TEXT              -- auto | manual | NULL
+    match_type TEXT              -- auto | manual | pre | NULL
 );
 CREATE INDEX IF NOT EXISTS idx_cover_spend ON cover_links(spend_id);
 

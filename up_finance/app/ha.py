@@ -19,6 +19,7 @@ import urllib.request
 from typing import Optional
 
 from .metrics import Metrics
+from .reconcile import Reconciler
 
 log = logging.getLogger(__name__)
 
@@ -42,6 +43,7 @@ class HomeAssistant:
         self.url = url
         self.token = token
         self._last_hash: dict[str, str] = {}
+        self.reconciler: Optional[Reconciler] = None
 
     @property
     def enabled(self) -> bool:
@@ -71,6 +73,17 @@ class HomeAssistant:
             log.debug("Canary check failed: %s", e)
             return False
 
+    def get_state(self, entity_id: str) -> Optional[str]:
+        """The state of an entity, or None if it doesn't exist or HA can't be reached."""
+        if not self.enabled or not entity_id:
+            return None
+        try:
+            r = self._request("GET", f"/states/{entity_id}")
+        except Exception as e:
+            log.debug("Reading %s failed: %s", entity_id, e)
+            return None
+        return r.get("state") if r else None
+
     def set_state(self, entity_id: str, state, attributes: dict, force: bool = False) -> None:
         payload = {"state": str(state) if state is not None else "unknown", "attributes": attributes}
         h = hashlib.sha1(json.dumps(payload, sort_keys=True, default=str).encode()).hexdigest()
@@ -85,7 +98,7 @@ class HomeAssistant:
             return 0
         if force:
             self._last_hash.clear()
-        sensors = build_sensors(m)
+        sensors = build_sensors(m, self.reconciler)
         for entity_id, (state, attrs) in sensors.items():
             self.set_state(entity_id, state, attrs)
         log.info("Published %d sensors to Home Assistant", len(sensors))
@@ -111,7 +124,28 @@ def _info(name: str, state, icon: str, **extra) -> tuple:
     return state, attrs
 
 
-def build_sensors(m: Metrics) -> dict[str, tuple]:
+def reconcile_sensors(rec: Reconciler) -> dict[str, tuple]:
+    r = rec.report()
+    if not r.get("enabled"):
+        return {}
+    s: dict[str, tuple] = {}
+    items = [{k: i[k] for k in ("date", "payee", "amount", "action", "suggested", "note", "status")}
+             for i in r["items"]]
+    s[PREFIX + "reconcile"] = _info(
+        "Up payments to reconcile", r["count"], "mdi:scale-balance",
+        unit_of_measurement="items", state_class="measurement",
+        account=r["account"], balance=r["balance"], float_target=r["float_target"], gap=r["gap"],
+        since=r["since"], since_source=r["since_source"], totals=r["totals"], net_effect=r["net_effect"],
+        projected_balance=r["projected_balance"], off_by=r["off_by"], items=items,
+        items_truncated=r["items_truncated"])
+    if r["float_target"]:
+        s[PREFIX + "float_gap"] = _money(
+            f"Up {r['account']} float gap", r["gap"], "mdi:wallet-plus",
+            float_target=r["float_target"], balance=r["balance"], off_by_after_reconcile=r["off_by"])
+    return s
+
+
+def build_sensors(m: Metrics, rec: Optional[Reconciler] = None) -> dict[str, tuple]:
     ov = m.overview()
     monthly = m.monthly(13)
     cats = m.categories()
@@ -234,4 +268,9 @@ def build_sensors(m: Metrics) -> dict[str, tuple]:
     s[PREFIX + "report_large_transactions"] = _info(
         "Up large transactions 30d", len(large), "mdi:alert-circle-outline",
         threshold=m.large_threshold, transactions=large)
+    if rec is not None:
+        try:
+            s.update(reconcile_sensors(rec))
+        except Exception as e:  # never let reconciling stop the other sensors
+            log.warning("Reconcile sensors failed: %s", e)
     return s

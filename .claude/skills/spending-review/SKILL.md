@@ -39,7 +39,7 @@ curl -sf -m 30 -H "Authorization: Bearer $UPF_KEY" -H "Content-Type: application
 `GET /api/schema` describes every table. Queries are read-only, one statement each, up to 5,000 rows.
 
 Other endpoints: `/api/overview`, `/api/savers`, `/api/monthly?months=24`, `/api/categories?month=YYYY-MM`,
-`/api/recurring`, `/api/merchants?days=90&limit=50`, `/api/large?days=30`,
+`/api/recurring`, `/api/merchants?days=90&limit=50`, `/api/large?days=30`, `/api/reconcile` (payments to reconcile back to the float),
 `/api/transactions?q=&month=&category=&kind=&limit=`, and `/api/export.csv`.
 
 If the Keychain item is missing, tell the user how to add it (they type the key themselves):

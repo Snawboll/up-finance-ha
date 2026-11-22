@@ -111,6 +111,15 @@ h3.group { font-size: 13px; font-weight: 600; margin: 16px 0 2px; }
   <main>
     <section class="tiles" id="tiles"></section>
 
+    <section class="card" id="recon-card" hidden>
+      <div class="card-head">
+        <div><h2>To reconcile</h2><div class="sub" id="recon-sub"></div></div>
+        <button id="recon-btn" type="button">Mark as reconciled</button>
+      </div>
+      <div class="card-summary" id="recon-summary"></div>
+      <div class="scroll" id="recon-table"></div>
+    </section>
+
     <section class="card half" id="reserve-card" hidden>
       <h2 id="reserve-title">Reserve</h2>
       <div class="sub">All income lands here. The fortnightly top-ups and anything outside the plan come out of it. Balance at the end of each fortnight.</div>
@@ -467,6 +476,27 @@ async function loadTransactions() {
   ], rows);
 }
 
+const RECON_ACTION = { cover: "Cover from", forward: "Forward to", return: "Return to", transfer: "Send to" };
+function renderReconcile(r) {
+  $("recon-card").hidden = !r.enabled;
+  if (!r.enabled) return;
+  const since = new Date(r.since).toLocaleString("en-AU", { dateStyle: "medium", timeStyle: "short" });
+  $("recon-sub").textContent = `${r.account} since ${since}` +
+    (r.since_source === "marked" ? " (last marked as reconciled)" : r.since_source === "auto" ? " (last time it was on its float)" : "");
+  const off = r.off_by;
+  $("recon-summary").innerHTML = r.float_target === null
+    ? `${r.count} item${r.count === 1 ? "" : "s"} · balance ${fmt2(r.balance)}`
+    : `Balance ${fmt2(r.balance)} of a ${fmt0(r.float_target)} float · ${fmt2(Math.abs(r.gap))} ${r.gap >= 0 ? "short" : "over"}` +
+      `<div class="sub">After the ${r.count} action${r.count === 1 ? "" : "s"} below: ${fmt2(r.projected_balance)}` +
+      (Math.abs(off) < 0.005 ? " ✓ exactly on the float" : ` (${fmt2(Math.abs(off))} ${off > 0 ? "over" : "under"} — something else moved money)`) + `</div>`;
+  $("recon-table").innerHTML = r.count ? table([
+    { label: "Date", num: 1, get: x => shortDate(x.date) },
+    { label: "Payee", html: x => esc(x.payee) + (x.status === "HELD" ? ` <span class="pill">pending</span>` : "") + (x.note ? `<div class="sub">${esc(x.note)}</div>` : "") },
+    { label: "Do this", html: x => `${RECON_ACTION[x.action]} ${x.suggested ? esc(x.suggested) : "<span class=\"sub\">a saver</span>"}` },
+    { label: "Amount", num: 1, html: x => `<span class="${x.effect > 0 ? "pos" : ""}">${x.effect > 0 ? "+" : "−"}${fmt2(x.amount)}</span>` },
+  ], r.items) : `<div class="empty">Nothing to reconcile.</div>`;
+}
+
 function renderPlan(plan) {
   const F = plan.fortnights, sm = plan.summary, last = F.length - 1;
   const r = plan.reserve;
@@ -549,6 +579,7 @@ async function loadAll() {
     api("api/merchants?days=90&limit=15"), api("api/large?days=30"), api("api/new_merchants?days=30"),
     api("api/category_list"), api("api/health"), api("api/plan"),
   ]);
+  api("api/reconcile").then(renderReconcile).catch(() => {});
   syncStatus(ov, health);
   tiles(ov, plan);
   renderPlan(plan);
@@ -625,6 +656,11 @@ $("sync-btn").addEventListener("click", async () => {
   try { await api("api/sync", { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" }); await loadAll(); }
   catch (e) { $("sync-status").innerHTML = `<span class="error">Sync failed: ${esc(e.message)}</span>`; }
   finally { b.disabled = false; b.textContent = "Sync now"; }
+});
+$("recon-btn").addEventListener("click", async () => {
+  if (!confirm("Mark the spending account as reconciled? Items before now will drop off the list.")) return;
+  await api("api/reconcile/mark", { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" });
+  renderReconcile(await api("api/reconcile"));
 });
 loadAll().catch(e => { $("sync-status").innerHTML = `<span class="error">${esc(e.message)}</span>`; });
 </script>

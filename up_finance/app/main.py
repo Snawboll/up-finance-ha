@@ -19,6 +19,7 @@ from zoneinfo import ZoneInfo
 from .db import Database
 from .ha import HomeAssistant
 from .metrics import Metrics
+from .reconcile import Reconciler
 from .rules import parse_rules
 from .sync import Syncer
 from .up_client import UpAuthError, UpClient
@@ -49,6 +50,9 @@ def load_options() -> dict:
     opts.setdefault("ignore_payees", [])
     opts.setdefault("payee_rules", [])
     opts.setdefault("reserve_saver", "Savings")
+    opts.setdefault("float_target", 0)
+    opts.setdefault("float_account", "")
+    opts.setdefault("reconcile_button", "input_button.up_finance_reconciled")
     return opts
 
 
@@ -59,6 +63,30 @@ def parse_budgets(raw) -> dict[str, float]:
         if cat and b.get("monthly"):
             out[cat] = float(b["monthly"])
     return out
+
+
+def check_button(db: Database, ha: HomeAssistant, entity_id: str) -> bool:
+    """Mark the account reconciled when the Home Assistant button has a new press.
+
+    An input_button's state is the time it was last pressed. The first time we see the
+    button we only remember its state, so installing or restarting never marks anything.
+    """
+    state = ha.get_state(entity_id)
+    if not state or state in ("unknown", "unavailable"):
+        return False
+    seen = db.get_state("reconcile_button_seen")
+    if state == seen:
+        return False
+    with db.writer() as conn:
+        db.set_state(conn, "reconcile_button_seen", state)
+        if seen is None:
+            return False
+        try:
+            at = datetime.fromisoformat(state.replace("Z", "+00:00")).isoformat()
+        except ValueError:
+            at = datetime.now(timezone.utc).isoformat(timespec="seconds")
+        db.set_state(conn, "reconciled_at", at)
+    return True
 
 
 def main() -> None:
@@ -80,6 +108,10 @@ def main() -> None:
     metrics = Metrics(db, tz, parse_budgets(opts["budgets"]), float(opts["large_transaction_threshold"]),
                       reserve_saver=str(opts.get("reserve_saver") or ""))
     ha = HomeAssistant()
+    reconciler = Reconciler(db, tz, float(opts.get("float_target") or 0), str(opts.get("float_account") or ""),
+                            reserve_saver=str(opts.get("reserve_saver") or ""))
+    ha.reconciler = reconciler
+    button = str(opts.get("reconcile_button") or "").strip()
 
     token = str(opts.get("up_token") or "")
     syncer = Syncer(db, UpClient(token), tz, str(opts["account_scope"])) if token else None
@@ -112,7 +144,11 @@ def main() -> None:
         print(json.dumps(metrics.overview(), indent=2))
         return
 
-    app = App(db, metrics, str(opts.get("api_key") or ""), do_sync, syncer.progress if syncer else None)
+    def republish() -> None:
+        ha.publish(metrics)
+
+    app = App(db, metrics, str(opts.get("api_key") or ""), do_sync, syncer.progress if syncer else None,
+              reconciler=reconciler, on_reconciled=republish)
     if args.dev:
         serve(app, int(os.environ.get("PORT", 8099)), "dev", host="127.0.0.1")
     else:
@@ -139,6 +175,12 @@ def main() -> None:
                 retry_wait = min(retry_wait * 2 if retry_wait else 300, 6 * 3600)
                 log.error("Sync failed: %s - retrying in %d min", e, retry_wait // 60)
                 next_sync = now + retry_wait
+        elif button and check_button(db, ha, button):
+            log.info("%s pressed - marked the spending account as reconciled", button)
+            try:
+                ha.publish(metrics)
+            except Exception as e:
+                log.warning("Publishing sensors failed: %s", e)
         elif ha.canary_missing():
             log.info("Home Assistant sensors missing (restart?) - republishing")
             try:

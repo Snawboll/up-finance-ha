@@ -5,8 +5,11 @@ doesn't say which purchase it was for. Two passes:
 
 1. auto   - a purchase on the same account, for exactly the cover amount, within
             10 minutes either side (Up's automatic covers land within seconds).
-2. manual - a purchase for exactly the cover amount in the 14 days before the
-            cover (covers you add later by hand).
+2. manual - a purchase for exactly the cover amount in the 60 days before the
+            cover (covers you add later by hand, e.g. when reconciling).
+3. pre    - a purchase for exactly the cover amount in the 14 days after the cover
+            (covered while the payment was still pending, then settled as a new
+            transaction, as Costco and fuel pre-authorisations do).
 
 Each purchase is linked to at most one cover. Covers with no match are kept with
 spend_id NULL so their money is still counted against the saver.
@@ -18,7 +21,8 @@ from collections import defaultdict
 from datetime import datetime
 
 AUTO_WINDOW_S = 10 * 60
-MANUAL_WINDOW_S = 14 * 24 * 3600
+MANUAL_WINDOW_S = 60 * 24 * 3600
+PRE_WINDOW_S = 14 * 24 * 3600
 
 
 def _ts(s: str) -> float:
@@ -58,7 +62,14 @@ def link_covers(conn: sqlite3.Connection) -> dict:
         sid = best(c, -MANUAL_WINDOW_S, 0)
         if sid:
             used.add(sid)
-        links[c["id"]] = (sid, "manual" if sid else None)
+            links[c["id"]] = (sid, "manual")
+    for c in covers:  # pass 3: covers made before the purchase settled
+        if c["id"] in links:
+            continue
+        sid = best(c, 0, PRE_WINDOW_S)
+        if sid:
+            used.add(sid)
+        links[c["id"]] = (sid, "pre" if sid else None)
 
     conn.execute("DELETE FROM cover_links")
     conn.executemany(
